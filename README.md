@@ -53,6 +53,8 @@ selon leur criticité (CVSS).
 
 La solution développée est un scanner de vulnérabilités automatisé qui cartographie une infrastructure réseau, collecte des informations CTI et fait le matching entre les composants détectés et les vulnérabilités connues. L'outil utilise des techniques avancées pour identifier les machines, ports, services et versions logicielles présents dans le réseau, puis interroge des bases de données publiques telles que CVE et CPE pour détecter les vulnérabilités associées.
 
+**Note**: la majorité des commentaires et documentations dans le code sont en anglais pour respecter les standards internationaux de développement logiciel et ont été rédigés à l'aide d'un modèle IA. Cependant, cette présentation et le README principal sont en français pour une meilleure compréhension dans le contexte académique.
+
 Les principales fonctionnalités de l'outil incluent :
 
 - Scan automatique du réseau pour identifier les actifs. (à implémenter)
@@ -60,3 +62,5 @@ Les principales fonctionnalités de l'outil incluent :
 - Matching des composants avec les vulnérabilités connues.
 - Génération de rapports de vulnérabilité détaillés.
 - Visualisation graphique des vulnérabilités (dashboard) (à implémenter).
+
+Toute la codebase à été organisée de manière modulaire pour faciliter la maintenance et l'extensibilité. La structure détaillée du projet est disponible dans le fichier [STRUCTURE.md](STRUCTURE.md).
