@@ -64,3 +64,55 @@ Les principales fonctionnalités de l'outil incluent :
 - Visualisation graphique des vulnérabilités (dashboard) (à implémenter).
 
 Toute la codebase à été organisée de manière modulaire pour faciliter la maintenance et l'extensibilité. La structure détaillée du projet est disponible dans le fichier [STRUCTURE.md](STRUCTURE.md).
+
+Une documentation détaillé des modules et de leur fonctionnement est également fournie pour aider à la compréhension et à l'utilisation de l'outil, voir [DOCUMENTATION.md](DOCUMENTATION.md).
+
+## Utilisation
+
+### Prérequis
+
+- Python 3.10 ou supérieur
+- Bibliothèques Python listées dans `requirements.txt`
+
+### Installation
+
+1. Cloner le dépôt :
+   
+   ```bash
+   git clone <repository_url>
+   cd BaseSecu-VulnScanner
+   ```
+
+2. Installer les dépendances :
+
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+### Configuration
+
+1. Modifier le fichier `inventory.ini` pour ajouter les machines à scanner. Exemple:
+
+    ```ini
+    [<nom_de_la_machine>]
+    host = <adresse_ip_ou_hostname>
+    user = <nom_utilisateur_ssh>
+    password = <mot_de_passe_ssh> / vide si utilisation de clés SSH
+    type = <type_de_machine>  # ex: linux, windows
+    ```
+
+2. Configurer les clés API dans `src/caching/constants.py`.
+
+### Exécution
+
+Lancer le scanner avec la commande suivante :
+
+```bash
+python main.py --inventory inventory.ini
+```
+
+Des options supplémentaires sont disponibles, utilisez `--help` pour les voir :
+
+```bash
+python main.py --help
+```

@@ -29,6 +29,7 @@ import os
 import logging
 from datetime import datetime
 import time
+import sys
 import nvdlib
 import argparse
 
@@ -157,7 +158,21 @@ def parse_arguments():
     return parser.parse_args()
 
 
-# Parse command-line arguments
+def main():
+    """
+    Main entry point for the vulnerability scanner application.
+    
+    Orchestrates the complete vulnerability scanning workflow:
+    1. Parse command-line arguments
+    2. Load machine inventory from configuration file
+    3. Process each machine to discover packages and generate CPEs
+    4. Query NVD database for vulnerabilities
+    5. Generate JSON reports with CVE details
+    
+    @return int Exit code (0 for success, 1 for errors)
+    """
+    
+    # Parse command-line arguments
 args = parse_arguments()
 inventory_file = args.inventory
 
