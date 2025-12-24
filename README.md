@@ -1,1 +1,62 @@
 # BaseSecu-VulnScanner
+> Projet de base de la sécu, A3 S1 CPE.
+
+## Sommaire
+
+- [Contexte](#contexte)
+- [Consignes & description du projet](#consignes--description-du-projet)
+  - [Objectifs](#objectifs)
+  - [Travail attendu](#travail-attendu)
+  - [Livrables](#livrables)
+- [Présentation de la solution](#présentation-de-la-solution)
+
+## Contexte
+
+Dans un contexte de multiplication des cybermenaces, les entreprises doivent être capables
+d’identifier rapidement les vulnérabilités présentes dans leur système d’information. Cependant, la
+détection et la corrélation manuelle entre les actifs d’un réseau (matériels, logiciels, services) et les
+bases de connaissance de menaces (CTI : Cyber Threat Intelligence) constituent une tâche complexe
+et chronophage.
+Ce projet vise à développer un outil capable de scanner automatiquement une infrastructure réseau
+afin d’identifier les matériels, logiciels et services présents, puis de faire correspondre ces éléments
+avec les bases de données CTI (telles que CVE, CWE, et CPE) pour détecter les vulnérabilités connues
+affectant les composants identifiés.
+
+## Consignes & description du projet
+
+### Objectifs
+
+1. Cartographier automatiquement une infrastructure réseau (machines, ports, services,
+versions logicielles).
+2. Collecter des informations CTI (OpenCTI, CVE, CWE, CPE, NVD, etc.).
+3. Faire le matching entre les composants détectés et les vulnérabilités connues.
+4. (Optionnel) Générer un rapport de vulnérabilité présentant les éléments à risque, leur criticité
+et les correctifs recommandés.
+5. (Optionnel) Proposer une visualisation graphique du réseau et des vulnérabilités associées.
+
+### Travail attendu
+
+• Utilisation d’un outil de scan réseau
+• Extraction des données CTI depuis les bases publiques
+• Conception d’un algorithme ou d’un pipeline pour faire la correspondance entre le scan et les
+vulnérabilités.
+• (Bonus) Intégration d’un modèle de scoring de risque ou d’une priorisation des vulnérabilités
+selon leur criticité (CVSS).
+• (Bonus) Développement d’une interface web simple pour visualiser les résultats.
+
+### Livrables
+• Code source de l’outil ou du prototype développé
+• Rapport technique détaillant la démarche, les choix techniques et les résultats
+• Démonstration ou présentation du fonctionnement de la solution
+
+## Présentation de la solution
+
+La solution développée est un scanner de vulnérabilités automatisé qui cartographie une infrastructure réseau, collecte des informations CTI et fait le matching entre les composants détectés et les vulnérabilités connues. L'outil utilise des techniques avancées pour identifier les machines, ports, services et versions logicielles présents dans le réseau, puis interroge des bases de données publiques telles que CVE et CPE pour détecter les vulnérabilités associées.
+
+Les principales fonctionnalités de l'outil incluent :
+
+- Scan automatique du réseau pour identifier les actifs. (à implémenter)
+- Extraction et traitement des données CTI. (hardware à implémenter
+- Matching des composants avec les vulnérabilités connues.
+- Génération de rapports de vulnérabilité détaillés.
+- Visualisation graphique des vulnérabilités (dashboard) (à implémenter).

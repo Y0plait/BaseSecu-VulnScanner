@@ -18,9 +18,9 @@ import os
 import json
 import logging
 
-from constants import CACHE_DIR
-import pkg_finder
-import output_formatter as fmt
+from src.caching.constants import CACHE_DIR
+from src.acquisition import pkg_finder
+from src.reporting import output_formatter as fmt
 
 logger = logging.getLogger(__name__)
 

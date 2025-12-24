@@ -32,7 +32,7 @@ import nvdlib
 from datetime import datetime, timedelta
 import logging
 import os
-from constants import CACHE_DIR
+from src.caching.constants import CACHE_DIR
 
 logger = logging.getLogger(__name__)
 

@@ -32,7 +32,7 @@ import logging
 
 import os
 
-from constants import GENAI_API_KEY, CACHE_DIR
+from src.caching.constants import GENAI_API_KEY, CACHE_DIR
 
 logger = logging.getLogger(__name__)
 
