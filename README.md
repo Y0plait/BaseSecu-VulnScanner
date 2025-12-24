@@ -56,14 +56,14 @@ selon leur criticité (CVSS).
 
 ## Présentation de la solution
 
-La solution développée est un scanner de vulnérabilités automatisé qui cartographie une infrastructure réseau, collecte des informations CTI et fait le matching entre les composants détectés et les vulnérabilités connues. L'outil utilise des techniques avancées pour identifier les machines, ports, services et versions logicielles présents dans le réseau, puis interroge des bases de données publiques telles que CVE et CPE pour détecter les vulnérabilités associées.
+La solution développée est un scanner de vulnérabilités automatisé qui collecte des informations CTI et fait le matching entre les composants détectés et les vulnérabilités connues à l'aide du LLM `gemini-flash-2.5` de Google. L'outil se base sur le matching entre CPE (common platform enumeration) et CVE (common vulnerabilities and exposures) pour identifier les vulnérabilités associées paquets présents sur les actifs (Linux & Windows pour le moment) d'un réseau.
 
 **Note**: la majorité des commentaires et documentations dans le code sont en anglais pour respecter les standards internationaux de développement logiciel et ont été rédigés à l'aide d'un modèle IA. Cependant, cette présentation et le README principal sont en français pour une meilleure compréhension dans le contexte académique.
 
 Les principales fonctionnalités de l'outil incluent :
 
-- Scan automatique du réseau pour identifier les actifs. (à implémenter)
-- Extraction et traitement des données CTI. (hardware à implémenter
+- Scan automatique du réseau pour identifier les actifs (à implémenter)
+- Extraction et traitement des données CTI (hardware à implémenter).
 - Matching des composants avec les vulnérabilités connues.
 - Génération de rapports de vulnérabilité détaillés.
 - Visualisation graphique des vulnérabilités (dashboard) (à implémenter).
@@ -106,7 +106,7 @@ Une documentation détaillé des modules et de leur fonctionnement est égalemen
     type = <type_de_machine>  # ex: linux, windows
     ```
 
-2. Configurer les clés API dans `src/caching/constants.py`.
+2. Configurer les clés API dans `src/caching/constants.py`. Pour obtenir une clé API NVD, inscrivez-vous sur le [site officiel NVD](https://nvd.nist.gov/developers/request-an-api-key).
 
 ### Exécution
 
