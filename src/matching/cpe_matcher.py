@@ -39,6 +39,35 @@ logger = logging.getLogger(__name__)
 # Initialize Google GenAI client
 client = genai.Client(api_key=GENAI_API_KEY)
 
+# Hardware CPE generation prompt for CPU/microarchitecture vulnerabilities
+HARDWARE_CPE_PROMPT = """You are a cybersecurity expert specialized in hardware and CPU vulnerability identification.
+
+Your task is to convert hardware descriptions into CPE 2.3 identifiers for detecting microarchitecture vulnerabilities.
+
+CRITICAL RULES:
+1. Output ONLY valid CPE 2.3 strings for hardware (h:), one per line
+2. Format: cpe:2.3:h:VENDOR:PRODUCT:VERSION:*:*:*:*:*:*:*
+3. Vendor must be recognized CPU manufacturer: intel, amd, arm
+4. Product is the CPU model/family name (lowercase, with dashes/underscores as needed)
+5. VERSION is critical - extract from model descriptions or use * if unknown
+6. NEVER add explanations, comments, or extra text
+7. Match against known CPU models for accurate CPE matching
+
+HARDWARE VULNERABILITY CONTEXT:
+- Spectre (CVE-2017-5753, CVE-2017-5715): Affects most modern CPUs
+- Meltdown (CVE-2017-5754): Affects Intel processors
+- RIDL/Zombieload (CVE-2019-11091): Intel CPU cache-timing attack
+- Microcode updates often critical for mitigation
+
+EXAMPLES:
+Intel(R) Xeon(R) Platinum 8280 CPU @ 2.70GHz → cpe:2.3:h:intel:xeon_platinum_8280:*:*:*:*:*:*:*:*
+AMD EPYC 7002 Series → cpe:2.3:h:amd:epyc_7002:*:*:*:*:*:*:*:*
+Intel(R) Core(TM) i7-11700K CPU → cpe:2.3:h:intel:core_i7_11700k:*:*:*:*:*:*:*:*
+ARM Cortex-A72 → cpe:2.3:h:arm:cortex_a72:*:*:*:*:*:*:*:*
+
+HARDWARE DESCRIPTIONS TO ANALYZE (convert to CPE, one per line, in same order):
+"""
+
 # Enhanced prompt for consistent, high-quality CPE generation with VERSION inclusion
 ENHANCED_CPE_PROMPT = """You are a cybersecurity expert specialized in CPE (Common Platform Enumeration) identification.
 
@@ -72,16 +101,17 @@ curl (no version) → cpe:2.3:a:curl:curl:*:*:*:*:*:*:*:*
 PACKAGES TO ANALYZE (extract version from name and output one CPE per line, in same order):
 """
 
-def ask_for_cpe(packages_list, machine, model="gemini-2.5-flash", writeToFile=True, default_context=None) -> str:
+def ask_for_cpe(packages_list, machine, model="gemini-2.5-flash", writeToFile=True, default_context=None, is_hardware=False) -> str:
     """
-    Generate CPE identifiers for a list of packages using Google Generative AI.
+    Generate CPE identifiers for packages or hardware using Google Generative AI.
     
-    @param packages_list str or list Package names to convert to CPEs (string with newlines or list)
+    @param packages_list str or list Package/hardware names to convert to CPEs (string with newlines or list)
     @param machine str Machine name for logging and file output purposes
     @param model str Gemini model identifier (default: "gemini-2.5-flash")
                      Other options: "gemini-pro", "gemini-ultra" (if available)
     @param writeToFile bool Whether to save CPE list to cache/machines/{machine}/cpe_list_{machine}.txt
     @param default_context str Prompt context with instructions for AI model
+    @param is_hardware bool Whether this is hardware CPE generation (default: False for packages)
     
     @return str AI model response containing CPE identifiers (one per line)
     
@@ -91,17 +121,21 @@ def ask_for_cpe(packages_list, machine, model="gemini-2.5-flash", writeToFile=Tr
     - Same package always generates same CPE across runs
     - Enhanced prompt with explicit rules and examples
     
+    **Hardware CPEs:**
+    When is_hardware=True, generates CPEs for hardware components (h:) instead of packages (a:).
+    Used for detecting microarchitecture vulnerabilities like Spectre, Meltdown, etc.
+    
     **Batch Processing Workflow:**
-    1. Combine improved prompt context with package list
+    1. Combine improved prompt context with package/hardware list
     2. Send to Gemini model with temperature=0 for determinism
-    3. Model returns CPE identifiers (one per package, one per line)
+    3. Model returns CPE identifiers (one per item, one per line)
     4. Optionally save output to file for later reference
     
     **Response Format:**
     Output is expected to be one CPE per line:
     @code
     cpe:2.3:a:vendor:product:version:*:*:*:*:*:*:*
-    cpe:2.3:a:vendor2:product2:version2:*:*:*:*:*:*:*
+    cpe:2.3:h:vendor:product:version:*:*:*:*:*:*:*
     @endcode
     
     This format is then parsed by pkg_finder.cache_cpes() for storage.
@@ -131,7 +165,10 @@ def ask_for_cpe(packages_list, machine, model="gemini-2.5-flash", writeToFile=Tr
     
     # Use enhanced prompt if no custom context provided
     if default_context is None:
-        context_info = ENHANCED_CPE_PROMPT
+        if is_hardware:
+            context_info = HARDWARE_CPE_PROMPT
+        else:
+            context_info = ENHANCED_CPE_PROMPT
     else:
         context_info = default_context
 
@@ -139,7 +176,7 @@ def ask_for_cpe(packages_list, machine, model="gemini-2.5-flash", writeToFile=Tr
 
     try:
         package_count = len(packages_list) if isinstance(packages_list, list) else len(packages_text.split("\n"))
-        logger.debug(f"Generating CPEs for {package_count} packages on {machine}")
+        logger.debug(f"Generating {'hardware ' if is_hardware else ''}CPEs for {package_count} items on {machine}")
         response = client.models.generate_content(
             model=model, 
             contents=content,
@@ -151,12 +188,12 @@ def ask_for_cpe(packages_list, machine, model="gemini-2.5-flash", writeToFile=Tr
         )
 
         if writeToFile:
-            cpe_file = os.path.join(CACHE_DIR, "machines", machine, f"cpe_list_{machine}.txt")
+            cpe_file = os.path.join(CACHE_DIR, "machines", machine, f"cpe_list_{machine}{'_hw' if is_hardware else ''}.txt")
             os.makedirs(os.path.dirname(cpe_file), exist_ok=True)
             with open(cpe_file, "w") as f:
                 f.write(response.text)
             logger.info(f"CPE list for {machine} written to {cpe_file}")
-            print(f"[*] CPE list for {machine} written to cpe_list_{machine}.txt")
+            print(f"[*] CPE list for {machine} written to {os.path.basename(cpe_file)}")
 
         logger.debug(f"Generated CPE response for {machine}: {len(response.text)} characters")
         return response.text

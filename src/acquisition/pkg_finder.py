@@ -210,6 +210,110 @@ def get_installed_packages_linux(loaded_config, machine_inventory_name) -> list:
     
     return sanitized_packages
 
+
+def get_hardware_info(loaded_config, machine_inventory_name) -> dict:
+    """
+    Retrieve hardware information from a remote Linux machine via SSH using lscpu.
+    
+    @param loaded_config dict Configuration dictionary (typically from ConfigParser)
+    @param machine_inventory_name str Machine name/identifier from inventory
+    
+    @return dict Dictionary containing parsed hardware information with keys:
+                 - 'vendor_id': CPU vendor (Intel, AMD, etc.)
+                 - 'model_name': CPU model description
+                 - 'family': CPU family identifier
+                 - 'model': CPU model number
+                 - 'stepping': CPU stepping number
+                 - 'flags': Space-separated CPU flags/features
+                 - 'cores': Number of CPU cores
+                 - 'threads': Number of threads per core
+                 - 'raw_output': Complete lscpu output for reference
+    
+    @details
+    Uses `lscpu` command to gather CPU information without elevated privileges.
+    Parses key:value format output commonly found on Linux systems.
+    
+    Hardware CPE can be generated for vulnerabilities like:
+    - Spectre (CVE-2017-5753, CVE-2017-5715)
+    - Meltdown (CVE-2017-5754)
+    - RIDL/Zombieload (CVE-2019-11091)
+    - CPU errata and microcode issues
+    
+    @note
+    Returns dict with all keys present but empty string if lscpu unavailable or fails.
+    This allows graceful degradation without stopping the scan.
+    """
+    config = loaded_config
+    machine = machine_inventory_name
+    
+    linux_client = paramiko.SSHClient()
+    linux_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    
+    hardware_info = {
+        'vendor_id': '',
+        'model_name': '',
+        'family': '',
+        'model': '',
+        'stepping': '',
+        'flags': '',
+        'cores': '',
+        'threads': '',
+        'raw_output': ''
+    }
+    
+    try:
+        logger.debug(f"Retrieving hardware info from {machine} ({config[machine]['host']})")
+        linux_client.connect(config[machine]['host'], username=config[machine]['user'], password=config[machine]['password'])
+        
+        # Get CPU information
+        stdin, stdout, stderr = linux_client.exec_command('lscpu')
+        lscpu_output = stdout.read().decode().strip()
+        
+        if not lscpu_output:
+            logger.warning(f"No lscpu output from {machine}")
+            linux_client.close()
+            return hardware_info
+        
+        hardware_info['raw_output'] = lscpu_output
+        logger.debug(f"Retrieved lscpu output ({len(lscpu_output)} bytes)")
+        
+        # Parse lscpu output (key:value format)
+        for line in lscpu_output.split('\n'):
+            if ':' not in line:
+                continue
+            
+            key, value = line.split(':', 1)
+            key = key.strip().lower()
+            value = value.strip()
+            
+            # Map lscpu keys to our hardware_info dict
+            if key == 'vendor id':
+                hardware_info['vendor_id'] = value
+            elif key == 'model name':
+                hardware_info['model_name'] = value
+            elif key == 'cpu family':
+                hardware_info['family'] = value
+            elif key == 'model':
+                hardware_info['model'] = value
+            elif key == 'stepping':
+                hardware_info['stepping'] = value
+            elif key == 'flags':
+                hardware_info['flags'] = value
+            elif key == 'cpu(s)':
+                hardware_info['cores'] = value
+            elif key == 'thread(s) per core':
+                hardware_info['threads'] = value
+        
+        logger.info(f"Hardware info retrieved from {machine}: {hardware_info['model_name']}")
+        
+    except Exception as e:
+        logger.warning(f"Could not retrieve hardware info from {machine}: {e}")
+    finally:
+        linux_client.close()
+    
+    return hardware_info
+
+
 def get_new_packages(machine_inventory_name, current_installed_packages) -> list:
     """
     Detect packages that are newly installed since last scan.

@@ -164,3 +164,124 @@ def generate_cpes_for_packages(new_packages, machine, cpe_matcher):
                 packages_cpes[package] = cached_cpes
     
     return packages_cpes
+
+
+def process_machine_hardware(config, machine):
+    """
+    Retrieve and process hardware information for a machine.
+    
+    Connects to a machine using lscpu and extracts CPU/hardware details
+    for CPE generation and vulnerability matching.
+    
+    @param config ConfigParser object containing machine configuration
+    @param machine str Machine name from inventory
+    
+    @return dict Hardware information dictionary with keys:
+                 - vendor_id: CPU vendor (Intel, AMD, etc.)
+                 - model_name: CPU model description  
+                 - family: CPU family identifier
+                 - model: CPU model number
+                 - stepping: CPU stepping number
+                 - flags: CPU flags (spectre, meltdown mitigation, etc.)
+                 - cores: Number of CPU cores
+                 - threads: Threads per core
+                 - raw_output: Complete lscpu output
+    
+    @details
+    Used to detect vulnerabilities like:
+    - Spectre (CVE-2017-5753, CVE-2017-5715)
+    - Meltdown (CVE-2017-5754)
+    - CPU errata and microcode issues
+    """
+    if config[machine]['type'] != 'linux':
+        return {}
+    
+    fmt.print_info("Retrieving hardware information...")
+    logger.debug(f"Retrieving hardware info from {machine}")
+    hardware_info = pkg_finder.get_hardware_info(config, machine)
+    
+    if hardware_info and hardware_info.get('model_name'):
+        fmt.print_success(f"Hardware: {hardware_info.get('model_name', 'Unknown')}")
+        logger.info(f"Retrieved hardware info from {machine}: {hardware_info.get('model_name')}")
+    else:
+        fmt.print_warning("Could not retrieve hardware information")
+        logger.warning(f"No hardware information available from {machine}")
+    
+    return hardware_info
+
+
+def generate_cpes_for_hardware(hardware_info, machine, cpe_matcher):
+    """
+    Generate CPE identifiers for hardware/CPU information.
+    
+    Uses Google GenAI API to map hardware characteristics to CPE identifiers.
+    Similar to package CPE generation but for hardware components.
+    
+    @param hardware_info dict Hardware information from lscpu
+    @param machine str Machine name for logging
+    @param cpe_matcher module CPE matcher module with ask_for_cpe() function
+    
+    @return dict Dictionary mapping hardware components to CPE lists
+            Example: {'CPU-Intel-Xeon': ['cpe:2.3:h:intel:xeon:...']}
+    
+    @details
+    Hardware vulnerabilities are typically microarchitecture-related:
+    - Spectre family (register file/predictor/cache) 
+    - Meltdown (TLB)
+    - Side-channel attacks
+    - Bus locking issues
+    
+    The CPE matcher identifies the vendor and model to generate appropriate CPEs.
+    """
+    if not hardware_info or not hardware_info.get('model_name'):
+        logger.debug(f"No hardware information to generate CPEs for {machine}")
+        return {}
+    
+    fmt.print_info("Generating CPEs for hardware...")
+    logger.info(f"Starting hardware CPE generation for {machine}")
+    
+    # Build a simplified hardware description for CPE generation
+    hardware_items = []
+    if hardware_info.get('vendor_id'):
+        hardware_items.append(f"CPU-{hardware_info.get('vendor_id')}")
+    
+    if hardware_info.get('model_name'):
+        # Extract main model info, avoid very long descriptions
+        model_parts = hardware_info.get('model_name', '').split(' ')[:3]
+        if model_parts:
+            hardware_items.append("-".join(model_parts))
+    
+    if not hardware_items:
+        logger.debug(f"Insufficient hardware information for {machine}")
+        return {}
+    
+    model = "gemini-2.5-flash"
+    fmt.print_info(f"Generating CPEs for hardware component (calling AI model: {model})...")
+    logger.info(f"Calling AI model ({model}) to generate hardware CPEs for {machine}")
+    
+    # Generate CPE for hardware
+    hardware_cpe_response = cpe_matcher.ask_for_cpe(hardware_items, machine, model=model, is_hardware=True)
+    
+    # Parse response
+    hardware_cpes = {}
+    cpes_from_response = [line.strip() for line in hardware_cpe_response.split('\n') if line.strip().startswith('cpe:')]
+    logger.debug(f"Extracted {len(cpes_from_response)} hardware CPEs from AI response")
+    
+    if cpes_from_response:
+        for i, hw_item in enumerate(hardware_items):
+            if i < len(cpes_from_response):
+                cpe = cpes_from_response[i].strip()
+                if cpe_matcher.validate_cpe_format(cpe):
+                    hardware_cpes[hw_item] = [cpe]
+                    logger.debug(f"Valid hardware CPE: {cpe}")
+                else:
+                    logger.warning(f"Invalid hardware CPE format: {cpe}")
+    
+    if hardware_cpes:
+        fmt.print_success(f"Hardware CPEs generated for {len(hardware_cpes)} components")
+        logger.info(f"Generated hardware CPEs for {len(hardware_cpes)} components on {machine}")
+    else:
+        fmt.print_warning("No valid hardware CPEs generated")
+        logger.warning(f"Failed to generate valid hardware CPEs for {machine}")
+    
+    return hardware_cpes

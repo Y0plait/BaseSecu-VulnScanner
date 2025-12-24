@@ -243,26 +243,46 @@ for machine in config.keys():
         
         installed_packages, new_packages = mp.process_machine_packages(config, machine)
         
+        # Retrieve hardware information
+        print()
+        hardware_info = mp.process_machine_hardware(config, machine)
+        
         # Use all packages if force-check is enabled, otherwise use only new packages
         packages_to_check = installed_packages if args.force_check else new_packages
         
         if not packages_to_check:
             fmt.print_warning(f"No packages to check" + (" (use --force-check to check all packages)" if not args.force_check else ""))
             logger.info(f"No packages to check on {machine}" + (" (force-check disabled)" if not args.force_check else ""))
+        else:
+            if args.force_check:
+                fmt.print_info(f"Force-check enabled: checking all {len(packages_to_check)} installed packages")
+                logger.info(f"Force-check enabled: checking all {len(packages_to_check)} installed packages on {machine}")
+            
+            # Generate CPEs for packages to check
+            packages_cpes = mp.generate_cpes_for_packages(packages_to_check, machine, cpe_matcher)
+            
+            # Check vulnerabilities for packages
             print()
-            continue
+            vulnerabilities_found, machine_vulnerabilities = vc.check_vulnerabilities(
+                packages_cpes, machine, NVD_NIST_CPE_API_KEY, API_REQUEST_DELAY
+            )
         
-        if args.force_check:
-            fmt.print_info(f"Force-check enabled: checking all {len(packages_to_check)} installed packages")
-            logger.info(f"Force-check enabled: checking all {len(packages_to_check)} installed packages on {machine}")
-        
-        # Generate CPEs for packages to check
-        packages_cpes = mp.generate_cpes_for_packages(packages_to_check, machine, cpe_matcher)
-        
-        # Check vulnerabilities
-        vulnerabilities_found, machine_vulnerabilities = vc.check_vulnerabilities(
-            packages_cpes, machine, NVD_NIST_CPE_API_KEY, API_REQUEST_DELAY
-        )
+        # Check hardware vulnerabilities if hardware info available
+        if hardware_info and hardware_info.get('model_name'):
+            print()
+            hardware_cpes = mp.generate_cpes_for_hardware(hardware_info, machine, cpe_matcher)
+            
+            if hardware_cpes:
+                # Check vulnerabilities for hardware CPEs
+                hw_vulnerabilities_found, hw_machine_vulnerabilities = vc.check_vulnerabilities(
+                    hardware_cpes, machine, NVD_NIST_CPE_API_KEY, API_REQUEST_DELAY, component_type="hardware"
+                )
+                
+                # Merge hardware vulnerabilities with package vulnerabilities
+                if hw_vulnerabilities_found:
+                    machine_vulnerabilities.update(hw_machine_vulnerabilities)
+                    vulnerabilities_found = vulnerabilities_found or hw_vulnerabilities_found
+                    logger.info(f"Added {len(hw_machine_vulnerabilities)} hardware vulnerability entries to report")
         
         # Finalize report
         vuln_count = vc.finalize_machine_report(machine, vulnerabilities_found, machine_vulnerabilities)
