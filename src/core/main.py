@@ -38,6 +38,7 @@ from src.matching import cpe_matcher
 from src.reporting import output_formatter as fmt
 from src.acquisition import machine_processor as mp
 from src.reporting import vulnerability_checker as vc
+from src.reporting import html_report_generator as html_gen
 from src.caching.constants import NVD_NIST_CPE_API_KEY, CACHE_DIR, DEFAULT_INVENTORY, API_REQUEST_DELAY
 
 import json
@@ -297,11 +298,27 @@ for machine in config.keys():
     
     print()
 
-# Print final summary
-fmt.print_stats(total_machines, machines_processed, total_vulnerabilities)
-logger.info("="*70)
-logger.info(f"Vulnerability scan completed")
-logger.info(f"Total machines processed: {machines_processed}/{total_machines}")
-logger.info(f"Total vulnerabilities found: {total_vulnerabilities}")
-logger.info(f"Log file saved to: {log_filename}")
-logger.info("="*70)
+    # Print final summary
+    fmt.print_stats(total_machines, machines_processed, total_vulnerabilities)
+    logger.info("="*70)
+    logger.info(f"Vulnerability scan completed")
+    logger.info(f"Total machines processed: {machines_processed}/{total_machines}")
+    logger.info(f"Total vulnerabilities found: {total_vulnerabilities}")
+    logger.info(f"Log file saved to: {log_filename}")
+    
+    # Generate HTML report
+    fmt.print_section("Generating HTML Report")
+    try:
+        html_report_path = html_gen.generate_html_report()
+        if html_report_path:
+            fmt.print_success(f"HTML report generated: {html_report_path}")
+            logger.info(f"HTML report generated: {html_report_path}")
+            print(f"\n📊 Open in browser: file://{os.path.abspath(html_report_path)}")
+        else:
+            fmt.print_warning("Could not generate HTML report (no data found)")
+            logger.warning("Could not generate HTML report")
+    except Exception as e:
+        fmt.print_warning(f"Error generating HTML report: {e}")
+        logger.error(f"Error generating HTML report: {e}")
+    
+    logger.info("="*70)
