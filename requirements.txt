@@ -1,0 +1,4 @@
+paramiko
+requests
+google-genai
+nvdlib
