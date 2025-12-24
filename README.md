@@ -9,6 +9,11 @@
   - [Travail attendu](#travail-attendu)
   - [Livrables](#livrables)
 - [Présentation de la solution](#présentation-de-la-solution)
+- [Utilisation](#utilisation)
+  - [Prérequis](#prérequis)
+  - [Installation](#installation)
+  - [Configuration](#configuration)
+  - [Exécution](#exécution)
 
 ## Contexte
 
@@ -79,7 +84,7 @@ Une documentation détaillé des modules et de leur fonctionnement est égalemen
 1. Cloner le dépôt :
    
    ```bash
-   git clone <repository_url>
+   git clone https://github.com/Y0plait/BaseSecu-VulnScanner.git
    cd BaseSecu-VulnScanner
    ```
 
