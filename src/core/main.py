@@ -124,17 +124,20 @@ def parse_arguments():
                                - inventory: Custom inventory file path
                                - flush_cache: Whether to flush all caches before scanning
                                - force_check: Whether to check all packages (not just new ones)
+                               - report_only: Whether to only generate report from existing cache
     
     @details
     Supported arguments:
     - --inventory FILE: Use custom inventory file (default: inventory.ini)
     - --flush-cache: Remove all cached data before scanning
     - --force-check: Check all packages even if no new ones detected (ignore cache)
+    - --report-only: Generate HTML report from existing cache data without scanning
     
     Examples:
     - python main.py --inventory custom_inventory.ini
     - python main.py --flush-cache
     - python main.py --force-check
+    - python main.py --report-only
     - python main.py --inventory custom.ini --flush-cache --force-check
     """
     parser = argparse.ArgumentParser(
@@ -156,6 +159,11 @@ def parse_arguments():
         action="store_true",
         help="Check all installed packages for vulnerabilities, even if no new packages are detected"
     )
+    parser.add_argument(
+        "--report-only",
+        action="store_true",
+        help="Generate HTML report from existing vulnerability cache data without scanning machines"
+    )
     return parser.parse_args()
 
 
@@ -174,129 +182,154 @@ def main():
     """
     
     # Parse command-line arguments
-args = parse_arguments()
-inventory_file = args.inventory
+    args = parse_arguments()
 
-logger.info("="*70)
-logger.info("Starting Vulnerability Scan")
-logger.info(f"Log file: {log_filename}")
-logger.info(f"Configuration file: {inventory_file}")
-
-# Load inventory configuration
-config = configparser.ConfigParser()
-if not os.path.exists(inventory_file):
-    fmt.print_error(f"Inventory file not found: {inventory_file}")
-    logger.error(f"Inventory file not found: {inventory_file}")
-    exit(1)
-
-config.read(inventory_file)
-logger.info(f"Configuration loaded from: {inventory_file}")
-
-# Handle cache flushing if requested
-if args.flush_cache:
-    fmt.print_section("Flushing Caches")
-    flush_all_caches()
-    print()
-
-# Initialize variable to hold installed packages
-new_packages = ""
-total_machines = len([m for m in config.keys() if m != "DEFAULT"])
-machines_processed = 0
-total_vulnerabilities = 0
-
-logger.info(f"Total machines in inventory: {total_machines}")
-
-# Test NVD API connectivity with a known vulnerable CPE
-fmt.print_section("Testing NVD API Connectivity")
-fmt.print_info("Testing direct connection to NVD API with a known CPE...")
-logger.info("Testing NVD API connectivity (direct API call, no cache)")
-
-test_cpe = "cpe:2.3:a:apache:log4j:2.14.1:*:*:*:*:*:*:*"  # Known vulnerable CPE (Log4Shell)
-try:
-    # Direct API call, bypassing cache
-    test_vulns = nvdlib.searchCPE(cpeMatchString=test_cpe, key=NVD_NIST_CPE_API_KEY)
-    vuln_count = len(test_vulns) if test_vulns else 0
-    
-    if vuln_count > 0:
-        fmt.print_success(f"NVD API connectivity verified ({vuln_count} matches found)")
-        logger.info(f"NVD API connectivity test successful: found {vuln_count} CPE matches for test CPE")
-    else:
-        fmt.print_warning("NVD API connectivity verified (no matches found for test CPE)")
-        logger.info("NVD API connectivity test successful: no CPE matches for test CPE")
-except Exception as e:
-    fmt.print_error(f"NVD API connectivity test failed: {e}")
-    logger.error(f"NVD API connectivity test failed: {e}")
-    exit(1)
-    
-time.sleep(API_REQUEST_DELAY)  # Respect rate limit after test
-
-# Iterate through each machine in the inventory
-for machine in config.keys():
-
-    # Skip default section
-    if machine == "DEFAULT":
-        continue
-
-    # Determine machine type and get installed packages
-    if config[machine]['type'] == 'linux':
-        fmt.print_section(f"{machine} - {config[machine]['host']}")
-        logger.info(f"Processing machine: {machine} ({config[machine]['host']})")
+    # Handle report-only mode: generate report from cache without scanning
+    if args.report_only:
+        fmt.print_section("Generating HTML Report from Cache")
+        logger.info("Report-only mode: Generating HTML report from existing cache data")
         
-        installed_packages, new_packages = mp.process_machine_packages(config, machine)
-        
-        # Retrieve hardware information
+        try:
+            html_report_path = html_gen.generate_html_report()
+            if html_report_path:
+                fmt.print_success(f"HTML report generated successfully")
+                logger.info(f"HTML report generated: {html_report_path}")
+                print(f"\n📊 Open in browser: file://{os.path.abspath(html_report_path)}")
+            else:
+                fmt.print_warning("No vulnerability data found in cache to generate report")
+                logger.warning("No vulnerability data found in cache")
+            return 0
+        except Exception as e:
+            fmt.print_error(f"Failed to generate HTML report: {str(e)}")
+            logger.error(f"Failed to generate HTML report: {str(e)}", exc_info=True)
+            return 1
+
+    inventory_file = args.inventory
+
+    logger.info("="*70)
+    logger.info("Starting Vulnerability Scan")
+    logger.info(f"Log file: {log_filename}")
+    logger.info(f"Configuration file: {inventory_file}")
+
+    # Load inventory configuration
+    config = configparser.ConfigParser()
+    if not os.path.exists(inventory_file):
+        fmt.print_error(f"Inventory file not found: {inventory_file}")
+        logger.error(f"Inventory file not found: {inventory_file}")
+        exit(1)
+
+    config.read(inventory_file)
+    logger.info(f"Configuration loaded from: {inventory_file}")
+
+    # Handle cache flushing if requested
+    if args.flush_cache:
+        fmt.print_section("Flushing Caches")
+        flush_all_caches()
         print()
-        hardware_info = mp.process_machine_hardware(config, machine)
+
+    # Initialize variable to hold installed packages
+    new_packages = ""
+    total_machines = len([m for m in config.keys() if m != "DEFAULT"])
+    machines_processed = 0
+    total_vulnerabilities = 0
+
+    logger.info(f"Total machines in inventory: {total_machines}")
+
+    # Test NVD API connectivity with a known vulnerable CPE
+    fmt.print_section("Testing NVD API Connectivity")
+    fmt.print_info("Testing direct connection to NVD API with a known CPE...")
+    logger.info("Testing NVD API connectivity (direct API call, no cache)")
+
+    test_cpe = "cpe:2.3:a:apache:log4j:2.14.1:*:*:*:*:*:*:*"  # Known vulnerable CPE (Log4Shell)
+    try:
+        # Direct API call, bypassing cache
+        test_vulns = nvdlib.searchCPE(cpeMatchString=test_cpe, key=NVD_NIST_CPE_API_KEY)
+        vuln_count = len(test_vulns) if test_vulns else 0
         
-        # Use all packages if force-check is enabled, otherwise use only new packages
-        packages_to_check = installed_packages if args.force_check else new_packages
-        
-        if not packages_to_check:
-            fmt.print_warning(f"No packages to check" + (" (use --force-check to check all packages)" if not args.force_check else ""))
-            logger.info(f"No packages to check on {machine}" + (" (force-check disabled)" if not args.force_check else ""))
+        if vuln_count > 0:
+            fmt.print_success(f"NVD API connectivity verified ({vuln_count} matches found)")
+            logger.info(f"NVD API connectivity test successful: found {vuln_count} CPE matches for test CPE")
         else:
-            if args.force_check:
-                fmt.print_info(f"Force-check enabled: checking all {len(packages_to_check)} installed packages")
-                logger.info(f"Force-check enabled: checking all {len(packages_to_check)} installed packages on {machine}")
-            
-            # Generate CPEs for packages to check
-            packages_cpes = mp.generate_cpes_for_packages(packages_to_check, machine, cpe_matcher)
-            
-            # Check vulnerabilities for packages
-            print()
-            vulnerabilities_found, machine_vulnerabilities = vc.check_vulnerabilities(
-                packages_cpes, machine, NVD_NIST_CPE_API_KEY, API_REQUEST_DELAY
-            )
+            fmt.print_warning("NVD API connectivity verified (no matches found for test CPE)")
+            logger.info("NVD API connectivity test successful: no CPE matches for test CPE")
+    except Exception as e:
+        fmt.print_error(f"NVD API connectivity test failed: {e}")
+        logger.error(f"NVD API connectivity test failed: {e}")
+        exit(1)
         
-        # Check hardware vulnerabilities if hardware info available
-        if hardware_info and hardware_info.get('model_name'):
-            print()
-            hardware_cpes = mp.generate_cpes_for_hardware(hardware_info, machine, cpe_matcher)
-            
-            if hardware_cpes:
-                # Check vulnerabilities for hardware CPEs
-                hw_vulnerabilities_found, hw_machine_vulnerabilities = vc.check_vulnerabilities(
-                    hardware_cpes, machine, NVD_NIST_CPE_API_KEY, API_REQUEST_DELAY, component_type="hardware"
-                )
-                
-                # Merge hardware vulnerabilities with package vulnerabilities
-                if hw_vulnerabilities_found:
-                    machine_vulnerabilities.update(hw_machine_vulnerabilities)
-                    vulnerabilities_found = vulnerabilities_found or hw_vulnerabilities_found
-                    logger.info(f"Added {len(hw_machine_vulnerabilities)} hardware vulnerability entries to report")
-        
-        # Finalize report
-        vuln_count = vc.finalize_machine_report(machine, vulnerabilities_found, machine_vulnerabilities)
-        total_vulnerabilities += vuln_count
-        machines_processed += 1
+    time.sleep(API_REQUEST_DELAY)  # Respect rate limit after test
 
-    elif config[machine]['type'] == 'windows':
-        fmt.print_warning(f"Windows machines not yet supported")
-        logger.warning(f"Skipping Windows machine {machine} - not yet supported")
+    # Iterate through each machine in the inventory
+    for machine in config.keys():
+
+        # Skip default section
+        if machine == "DEFAULT":
+            continue
+
+        # Determine machine type and get installed packages
+        if config[machine]['type'] == 'linux':
+            fmt.print_section(f"{machine} - {config[machine]['host']}")
+            logger.info(f"Processing machine: {machine} ({config[machine]['host']})")
+            
+            installed_packages, new_packages = mp.process_machine_packages(config, machine)
+            
+            # Retrieve hardware information
+            print()
+            hardware_info = mp.process_machine_hardware(config, machine)
+            
+            # Initialize vulnerability tracking variables
+            vulnerabilities_found = False
+            machine_vulnerabilities = {}
+            
+            # Use all packages if force-check is enabled, otherwise use only new packages
+            packages_to_check = installed_packages if args.force_check else new_packages
+            
+            if not packages_to_check:
+                fmt.print_warning(f"No packages to check" + (" (use --force-check to check all packages)" if not args.force_check else ""))
+                logger.info(f"No packages to check on {machine}" + (" (force-check disabled)" if not args.force_check else ""))
+            else:
+                if args.force_check:
+                    fmt.print_info(f"Force-check enabled: checking all {len(packages_to_check)} installed packages")
+                    logger.info(f"Force-check enabled: checking all {len(packages_to_check)} installed packages on {machine}")
+                
+                # Generate CPEs for packages to check
+                packages_cpes = mp.generate_cpes_for_packages(packages_to_check, machine, cpe_matcher)
+                
+                # Check vulnerabilities for packages
+                print()
+                vulnerabilities_found, machine_vulnerabilities = vc.check_vulnerabilities(
+                    packages_cpes, machine, NVD_NIST_CPE_API_KEY, API_REQUEST_DELAY
+                )
+            
+            # Check hardware vulnerabilities if hardware info available
+            if hardware_info and hardware_info.get('model_name'):
+                print()
+                hardware_cpes = mp.generate_cpes_for_hardware(hardware_info, machine, cpe_matcher)
+                
+                if hardware_cpes:
+                    # Check vulnerabilities for hardware CPEs
+                    hw_vulnerabilities_found, hw_machine_vulnerabilities = vc.check_vulnerabilities(
+                        hardware_cpes, machine, NVD_NIST_CPE_API_KEY, API_REQUEST_DELAY, component_type="hardware"
+                    )
+                    
+                    # Merge hardware vulnerabilities with package vulnerabilities
+                    if hw_vulnerabilities_found:
+                        machine_vulnerabilities.update(hw_machine_vulnerabilities)
+                        vulnerabilities_found = vulnerabilities_found or hw_vulnerabilities_found
+                        logger.info(f"Added {len(hw_machine_vulnerabilities)} hardware vulnerability entries to report")
+            
+            # Finalize report
+            vuln_count = vc.finalize_machine_report(machine, vulnerabilities_found, machine_vulnerabilities)
+            total_vulnerabilities += vuln_count
+            machines_processed += 1
+
+        elif config[machine]['type'] == 'windows':
+            fmt.print_warning(f"Windows machines not yet supported")
+            logger.warning(f"Skipping Windows machine {machine} - not yet supported")
+            print()
+            continue
+        
         print()
-        continue
-    
-    print()
 
     # Print final summary
     fmt.print_stats(total_machines, machines_processed, total_vulnerabilities)

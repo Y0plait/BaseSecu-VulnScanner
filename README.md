@@ -31,28 +31,26 @@ affectant les composants identifiés.
 
 ### Objectifs
 
-1. Cartographier automatiquement une infrastructure réseau (machines, ports, services,
-versions logicielles).
-2. Collecter des informations CTI (OpenCTI, CVE, CWE, CPE, NVD, etc.).
-3. Faire le matching entre les composants détectés et les vulnérabilités connues.
-4. (Optionnel) Générer un rapport de vulnérabilité présentant les éléments à risque, leur criticité
-et les correctifs recommandés.
-5. (Optionnel) Proposer une visualisation graphique du réseau et des vulnérabilités associées.
+1. Cartographier automatiquement une infrastructure réseau (machines, ports, services, versions logicielles).  
+2. Collecter des informations CTI (OpenCTI, CVE, CWE, CPE, NVD, etc.).  
+3. Faire le matching entre les composants détectés et les vulnérabilités connues.  
+4. (Optionnel) Générer un rapport de vulnérabilité présentant les éléments à risque, leur criticité et les correctifs recommandés.  
+5. (Optionnel) Proposer une visualisation graphique du réseau et des vulnérabilités associées.  
 
 ### Travail attendu
 
-• Utilisation d’un outil de scan réseau
-• Extraction des données CTI depuis les bases publiques
-• Conception d’un algorithme ou d’un pipeline pour faire la correspondance entre le scan et les
+- Utilisation d’un outil de scan réseau
+- Extraction des données CTI depuis les bases publiques
+- Conception d’un algorithme ou d’un pipeline pour faire la correspondance entre le scan et les
 vulnérabilités.
-• (Bonus) Intégration d’un modèle de scoring de risque ou d’une priorisation des vulnérabilités
+- (Bonus) Intégration d’un modèle de scoring de risque ou d’une priorisation des vulnérabilités
 selon leur criticité (CVSS).
-• (Bonus) Développement d’une interface web simple pour visualiser les résultats.
+- (Bonus) Développement d’une interface web simple pour visualiser les résultats.
 
 ### Livrables
-• Code source de l’outil ou du prototype développé
-• Rapport technique détaillant la démarche, les choix techniques et les résultats
-• Démonstration ou présentation du fonctionnement de la solution
+- Code source de l’outil ou du prototype développé
+- Rapport technique détaillant la démarche, les choix techniques et les résultats
+- Démonstration ou présentation du fonctionnement de la solution
 
 ## Présentation de la solution
 
@@ -62,11 +60,11 @@ La solution développée est un scanner de vulnérabilités automatisé qui coll
 
 Les principales fonctionnalités de l'outil incluent :
 
-- Scan automatique du réseau pour identifier les actifs (à implémenter)
-- Extraction et traitement des données CTI (hardware à implémenter).
-- Matching des composants avec les vulnérabilités connues.
-- Génération de rapports de vulnérabilité détaillés.
-- Visualisation graphique des vulnérabilités (dashboard) (à implémenter).
+- Scan automatique du réseau pour identifier les actifs (à implémenter).  
+- Extraction et traitement des données CTI (hardware à implémenter).  
+- Matching des composants avec les vulnérabilités connues.  
+- Génération de rapports de vulnérabilité détaillés.  
+- Visualisation graphique des vulnérabilités (dashboard) (à implémenter).  
 
 Toute la codebase à été organisée de manière modulaire pour faciliter la maintenance et l'extensibilité. La structure détaillée du projet est disponible dans le fichier [STRUCTURE.md](STRUCTURE.md).
 
@@ -76,8 +74,8 @@ Une documentation détaillé des modules et de leur fonctionnement est égalemen
 
 ### Prérequis
 
-- Python 3.10 ou supérieur
-- Bibliothèques Python listées dans `requirements.txt`
+- Python 3.10 ou supérieur.  
+- Bibliothèques Python listées dans `requirements.txt`.  
 
 ### Installation
 

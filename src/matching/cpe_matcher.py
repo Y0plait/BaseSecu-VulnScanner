@@ -31,6 +31,9 @@ from google.genai import types
 import logging
 
 import os
+import time
+from datetime import datetime, timedelta
+from collections import deque
 
 from src.caching.constants import GENAI_API_KEY, CACHE_DIR
 
@@ -38,6 +41,125 @@ logger = logging.getLogger(__name__)
 
 # Initialize Google GenAI client
 client = genai.Client(api_key=GENAI_API_KEY)
+
+
+class APIRateLimiter:
+    """
+    Rate limiter for Gemini API with support for free and paid tier limits.
+    
+    Free tier limits:
+    - 5 requests per minute
+    - 20 requests per day
+    
+    Tracks call history and enforces limits while providing user warnings.
+    """
+    
+    def __init__(self):
+        """Initialize the rate limiter with call tracking structures."""
+        self.is_paid = None  # Will be checked on first use
+        self.calls_today = deque()  # Timestamps of calls in last 24 hours
+        self.calls_last_minute = deque()  # Timestamps of calls in last minute
+        self.daily_limit = 20  # Free tier: 20 calls per day
+        self.minute_limit = 5  # Free tier: 5 calls per minute
+        self.total_calls = 0
+        self.plan_checked = False
+    
+    def check_plan(self):
+        """Check API plan on first use and set limits accordingly."""
+        if self.plan_checked:
+            return
+        
+        logger.info("Checking Google GenAI API plan...")
+        plan_info = check_gemini_plan()
+        self.is_paid = plan_info.get("is_paid", False)
+        self.plan_checked = True
+        
+        if self.is_paid:
+            logger.info("✓ API key is on a PAID plan - full rate limits apply")
+            print("[✓] Google GenAI API: PAID plan detected")
+            print("[✓] Full rate limits: No daily/minute restrictions")
+        else:
+            logger.warning("⚠ API key is on FREE tier - rate limits enforced")
+            print("[⚠] Google GenAI API: FREE tier detected")
+            print(f"[⚠] Rate limits: {self.minute_limit} requests/minute, {self.daily_limit} requests/day")
+            if "error" in plan_info:
+                logger.warning(f"    Error details: {plan_info['error']}")
+    
+    def can_make_request(self) -> bool:
+        """Check if a request can be made without hitting rate limits.
+        
+        @return bool True if request is allowed, False if rate limited
+        """
+        self.check_plan()
+        
+        # Paid tier has no limits
+        if self.is_paid:
+            return True
+        
+        # Remove timestamps older than 24 hours and 1 minute
+        now = time.time()
+        cutoff_day = now - (24 * 3600)
+        cutoff_minute = now - 60
+        
+        while self.calls_today and self.calls_today[0] < cutoff_day:
+            self.calls_today.popleft()
+        
+        while self.calls_last_minute and self.calls_last_minute[0] < cutoff_minute:
+            self.calls_last_minute.popleft()
+        
+        # Check daily limit
+        if len(self.calls_today) >= self.daily_limit:
+            logger.warning(f"Daily limit reached: {len(self.calls_today)}/{self.daily_limit}")
+            return False
+        
+        # Check minute limit
+        if len(self.calls_last_minute) >= self.minute_limit:
+            logger.warning(f"Minute limit reached: {len(self.calls_last_minute)}/{self.minute_limit}")
+            return False
+        
+        return True
+    
+    def record_call(self):
+        """Record a successful API call."""
+        now = time.time()
+        self.calls_today.append(now)
+        self.calls_last_minute.append(now)
+        self.total_calls += 1
+        
+        # Log usage
+        logger.debug(f"API call recorded. Total: {self.total_calls}, Today: {len(self.calls_today)}, Last minute: {len(self.calls_last_minute)}")
+    
+    def get_status(self) -> dict:
+        """Get current rate limit status.
+        
+        @return dict with keys: is_paid, total_calls, calls_today, calls_today_limit,
+                               calls_last_minute, calls_last_minute_limit
+        """
+        self.check_plan()
+        
+        # Clean up old timestamps
+        now = time.time()
+        cutoff_day = now - (24 * 3600)
+        cutoff_minute = now - 60
+        
+        while self.calls_today and self.calls_today[0] < cutoff_day:
+            self.calls_today.popleft()
+        
+        while self.calls_last_minute and self.calls_last_minute[0] < cutoff_minute:
+            self.calls_last_minute.popleft()
+        
+        return {
+            "is_paid": self.is_paid,
+            "total_calls": self.total_calls,
+            "calls_today": len(self.calls_today),
+            "calls_today_limit": "∞" if self.is_paid else self.daily_limit,
+            "calls_last_minute": len(self.calls_last_minute),
+            "calls_last_minute_limit": "∞" if self.is_paid else self.minute_limit
+        }
+
+
+# Global rate limiter instance
+rate_limiter = APIRateLimiter()
 
 # Hardware CPE generation prompt for CPU/microarchitecture vulnerabilities
 HARDWARE_CPE_PROMPT = """You are a cybersecurity expert specialized in hardware and CPU vulnerability identification.
@@ -101,7 +223,70 @@ curl (no version) → cpe:2.3:a:curl:curl:*:*:*:*:*:*:*:*
 PACKAGES TO ANALYZE (extract version from name and output one CPE per line, in same order):
 """
 
-def ask_for_cpe(packages_list, machine, model="gemini-2.5-flash", writeToFile=True, default_context=None, is_hardware=False) -> str:
+def check_gemini_plan():
+    """
+    Check if the API key is associated with a paid plan.
+    
+    @return dict Plan information with keys:
+            - 'is_paid': bool - True if paid plan, False if free tier
+            - 'model_tested': str - Model used for testing
+            - 'error': str - Error message if check failed (only if not paid)
+    
+    @details
+    This function checks the API key's plan by attempting to call gemini-3-pro,
+    which is exclusively available on paid plans. If the call succeeds, the API key
+    has paid access. If it fails with a permission/availability error, the key is
+    on the free tier.
+    
+    The gemini-3-pro model is used because:
+    - It's only available to paid plan subscribers
+    - Free tier API keys will receive a clear "not available" error
+    - This provides a definitive way to determine plan status
+    
+    @return_details
+    - is_paid=True: API key has access to paid-only models
+    - is_paid=False: API key is on free tier or has insufficient permissions
+    - error field only present if check failed
+    
+    @throws Does not throw - returns error details in dict instead
+    """
+    try:
+        test_prompt = "What is the capital of France?"
+        response = client.models.generate_content(
+            model="gemini-3-pro", 
+            contents=test_prompt,
+            config=types.GenerateContentConfig(
+                temperature=0.0,
+                top_p=1.0,
+                thinking_config=types.ThinkingConfig(thinking_budget=0)
+            ),
+        )
+        logger.info("API key is associated with a paid plan (gemini-3-pro available)")
+        return {
+            "is_paid": True,
+            "model_tested": "gemini-3-pro"
+        }
+    except Exception as e:
+        error_msg = str(e).lower()
+        
+        # Check if error indicates model unavailability due to free tier
+        if "not available" in error_msg or "permission denied" in error_msg or "forbidden" in error_msg:
+            logger.warning("API key is on free tier (gemini-3-pro not available)")
+            return {
+                "is_paid": False,
+                "model_tested": "gemini-3-pro",
+                "error": "Model not available - free tier API key"
+            }
+        else:
+            # Other errors (network, invalid key, etc.)
+            logger.error(f"Error checking API plan: {e}")
+            return {
+                "is_paid": False,
+                "model_tested": "gemini-3-pro",
+                "error": str(e)
+            }
+
+def ask_for_cpe(packages_list, machine, model="gemini-2.0-flash", writeToFile=True, default_context=None, is_hardware=False) -> str:
     """
     Generate CPE identifiers for packages or hardware using Google Generative AI.
     
@@ -177,6 +362,15 @@ def ask_for_cpe(packages_list, machine, model="gemini-2.5-flash", writeToFile=Tr
     try:
         package_count = len(packages_list) if isinstance(packages_list, list) else len(packages_text.split("\n"))
         logger.debug(f"Generating {'hardware ' if is_hardware else ''}CPEs for {package_count} items on {machine}")
+        
+        # Check rate limits before making API call
+        if not rate_limiter.can_make_request():
+            status = rate_limiter.get_status()
+            error_msg = f"Rate limit exceeded! Daily: {status['calls_today']}/{status['calls_today_limit']}, Minute: {status['calls_last_minute']}/{status['calls_last_minute_limit']}"
+            logger.error(error_msg)
+            print(f"[!] {error_msg}")
+            return ""
+        
         response = client.models.generate_content(
             model=model, 
             contents=content,
@@ -186,6 +380,12 @@ def ask_for_cpe(packages_list, machine, model="gemini-2.5-flash", writeToFile=Tr
                 thinking_config=types.ThinkingConfig(thinking_budget=0)  # Disables extended thinking
             ),
         )
+        
+        # Record successful API call
+        rate_limiter.record_call()
+        status = rate_limiter.get_status()
+        logger.info(f"API call successful. Usage - Today: {status['calls_today']}/{status['calls_today_limit']}, Minute: {status['calls_last_minute']}/{status['calls_last_minute_limit']}")
+        print(f"[*] API call successful - Today: {status['calls_today']}/{status['calls_today_limit']}, Last minute: {status['calls_last_minute']}/{status['calls_last_minute_limit']}")
 
         if writeToFile:
             cpe_file = os.path.join(CACHE_DIR, "machines", machine, f"cpe_list_{machine}{'_hw' if is_hardware else ''}.txt")
