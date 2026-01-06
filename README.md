@@ -60,15 +60,15 @@ La solution développée est un scanner de vulnérabilités automatisé qui coll
 
 Les principales fonctionnalités de l'outil incluent :
 
-- Scan automatique du réseau pour identifier les actifs (à implémenter).  
-- Extraction et traitement des données CTI (hardware à implémenter).  
-- Matching des composants avec les vulnérabilités connues.  
-- Génération de rapports de vulnérabilité détaillés.  
-- Visualisation graphique des vulnérabilités (dashboard) (à implémenter).  
+- Scan automatique du réseau pour identifier les actifs (outil séparé: cf. [SCAN.md](docs/SCAN.md)).
+- Extraction et traitement des données CTI (hardware à implémenter).
+- Matching des composants avec les vulnérabilités connues.
+- Génération de rapports de vulnérabilité détaillés.
+- Visualisation graphique des vulnérabilités (dashboard) (à implémenter).
 
-Toute la codebase à été organisée de manière modulaire pour faciliter la maintenance et l'extensibilité. La structure détaillée du projet est disponible dans le fichier [STRUCTURE.md](STRUCTURE.md).
+Toute la codebase à été organisée de manière modulaire pour faciliter la maintenance et l'extensibilité. La structure détaillée du projet est disponible dans le fichier [STRUCTURE.md](docs/STRUCTURE.md).
 
-Une documentation détaillé des modules et de leur fonctionnement est également fournie pour aider à la compréhension et à l'utilisation de l'outil, voir [DOCUMENTATION.md](DOCUMENTATION.md).
+Une documentation détaillé des modules et de leur fonctionnement est également fournie pour aider à la compréhension et à l'utilisation de l'outil, voir [DOCUMENTATION.md](docs/DOCUMENTATION.md).
 
 ## Utilisation
 

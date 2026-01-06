@@ -158,8 +158,11 @@ class APIRateLimiter:
         }
 
 
-# Global rate limiter instance
+# Global rate limiter instance (API plan checked only once on first use)
 rate_limiter = APIRateLimiter()
+
+# Flag to track if API plan has been checked globally
+_api_plan_checked_globally = False
 
 # Hardware CPE generation prompt for CPU/microarchitecture vulnerabilities
 HARDWARE_CPE_PROMPT = """You are a cybersecurity expert specialized in hardware and CPU vulnerability identification.
@@ -315,6 +318,7 @@ def ask_for_cpe(packages_list, machine, model="gemini-2.0-flash", writeToFile=Tr
     2. Send to Gemini model with temperature=0 for determinism
     3. Model returns CPE identifiers (one per item, one per line)
     4. Optionally save output to file for later reference
+    5. Automatically filters duplicate CPEs from LLM output
     
     **Response Format:**
     Output is expected to be one CPE per line:
@@ -323,6 +327,7 @@ def ask_for_cpe(packages_list, machine, model="gemini-2.0-flash", writeToFile=Tr
     cpe:2.3:h:vendor:product:version:*:*:*:*:*:*:*
     @endcode
     
+    Duplicate CPEs are automatically removed while preserving order.
     This format is then parsed by pkg_finder.cache_cpes() for storage.
     
     **Error Handling:**
@@ -340,6 +345,7 @@ def ask_for_cpe(packages_list, machine, model="gemini-2.0-flash", writeToFile=Tr
     @note
     Using enhanced prompt with examples to improve consistency and accuracy.
     The Gemini model's context window is large enough for 500+ packages in one call.
+    API plan is checked only once globally, not for each machine.
     """
 
     # Convert list to string if needed
@@ -387,21 +393,73 @@ def ask_for_cpe(packages_list, machine, model="gemini-2.0-flash", writeToFile=Tr
         logger.info(f"API call successful. Usage - Today: {status['calls_today']}/{status['calls_today_limit']}, Minute: {status['calls_last_minute']}/{status['calls_last_minute_limit']}")
         print(f"[*] API call successful - Today: {status['calls_today']}/{status['calls_today_limit']}, Last minute: {status['calls_last_minute']}/{status['calls_last_minute_limit']}")
 
+        # Remove duplicate CPEs from response while preserving order
+        response_text = response.text
+        seen_cpes = set()
+        unique_cpes = []
+        duplicate_count = 0
+        
+        for line in response_text.split('\n'):
+            line = line.strip()
+            if line and line.startswith('cpe:'):
+                if line not in seen_cpes:
+                    unique_cpes.append(line)
+                    seen_cpes.add(line)
+                else:
+                    duplicate_count += 1
+                    logger.debug(f"Duplicate CPE removed: {line}")
+        
+        if duplicate_count > 0:
+            logger.warning(f"Removed {duplicate_count} duplicate CPEs from AI response")
+            print(f"[*] Cleaned response: removed {duplicate_count} duplicate CPEs")
+        
+        cleaned_response = '\n'.join(unique_cpes)
+
         if writeToFile:
             cpe_file = os.path.join(CACHE_DIR, "machines", machine, f"cpe_list_{machine}{'_hw' if is_hardware else ''}.txt")
             os.makedirs(os.path.dirname(cpe_file), exist_ok=True)
             with open(cpe_file, "w") as f:
-                f.write(response.text)
+                f.write(cleaned_response)
             logger.info(f"CPE list for {machine} written to {cpe_file}")
             print(f"[*] CPE list for {machine} written to {os.path.basename(cpe_file)}")
 
-        logger.debug(f"Generated CPE response for {machine}: {len(response.text)} characters")
-        return response.text
+        logger.debug(f"Generated CPE response for {machine}: {len(cleaned_response)} characters ({len(unique_cpes)} unique CPEs)")
+        return cleaned_response
 
     except Exception as e:
         logger.error(f"Error generating CPEs for {machine}: {e}")
         print(f"[!] An error occurred while generating content for {machine}: {e}")
         return ""
+
+
+def initialize_api_once():
+    """
+    Initialize and check the API plan exactly once at the start of the entire process.
+    
+    This function should be called ONCE in main.py before processing any machines.
+    It ensures the API tier check happens only once globally, not for each machine.
+    
+    @details
+    Checks the Google GenAI API plan and initializes the rate limiter with proper limits:
+    - Paid tier: No rate limits
+    - Free tier: 5 requests/minute, 20 requests/day
+    
+    After this call, rate_limiter is properly initialized and subsequent calls to
+    ask_for_cpe() will respect the determined limits without re-checking the plan.
+    
+    @note
+    This should be called from src/core/main.py immediately after logging initialization
+    and before the machine processing loop.
+    """
+    global _api_plan_checked_globally
+    
+    if not _api_plan_checked_globally:
+        logger.info("Initializing Google GenAI API (checking plan once globally)")
+        rate_limiter.check_plan()
+        _api_plan_checked_globally = True
+        logger.info("API plan initialization complete - rate limiter ready for all machines")
+    else:
+        logger.debug("API plan already checked globally - skipping re-initialization")
 
 
 def validate_cpe_format(cpe_string):

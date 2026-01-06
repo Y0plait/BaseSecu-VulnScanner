@@ -189,8 +189,22 @@ def main():
         fmt.print_section("Generating HTML Report from Cache")
         logger.info("Report-only mode: Generating HTML report from existing cache data")
         
+        # Load inventory for network visualizations even in report-only mode
+        inventory_file = args.inventory
+        config = configparser.ConfigParser()
+        machines_dict = {}
+        
+        if os.path.exists(inventory_file):
+            config.read(inventory_file)
+            for machine in config.keys():
+                if machine != "DEFAULT":
+                    machines_dict[machine] = {
+                        'host': config[machine].get('host'),
+                        'type': config[machine].get('type', 'linux')
+                    }
+        
         try:
-            html_report_path = html_gen.generate_html_report()
+            html_report_path = html_gen.generate_html_report(machines_config=machines_dict)
             if html_report_path:
                 fmt.print_success(f"HTML report generated successfully")
                 logger.info(f"HTML report generated: {html_report_path}")
@@ -226,6 +240,12 @@ def main():
         fmt.print_section("Flushing Caches")
         flush_all_caches()
         print()
+
+    # Initialize Google GenAI API plan check ONCE globally
+    # This happens before any machine processing to avoid checking for each machine
+    fmt.print_section("Initializing Google GenAI API")
+    cpe_matcher.initialize_api_once()
+    print()
 
     # Initialize variable to hold installed packages
     new_packages = ""
@@ -342,7 +362,16 @@ def main():
     # Generate HTML report
     fmt.print_section("Generating HTML Report")
     try:
-        html_report_path = html_gen.generate_html_report()
+        # Convert config to dict format for network_visualizer
+        machines_dict = {}
+        for machine in config.keys():
+            if machine != "DEFAULT":
+                machines_dict[machine] = {
+                    'host': config[machine].get('host'),
+                    'type': config[machine].get('type', 'linux')
+                }
+        
+        html_report_path = html_gen.generate_html_report(machines_config=machines_dict)
         if html_report_path:
             fmt.print_success(f"HTML report generated: {html_report_path}")
             logger.info(f"HTML report generated: {html_report_path}")
