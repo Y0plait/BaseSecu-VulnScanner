@@ -1,0 +1,82 @@
+# Environment variables and secrets
+.env
+.env.local
+.env.*.local
+.env.production
+.env.*.pem
+
+# API keys and credentials
+src/caching/constants_local.py
+secrets.yaml
+config.private.py
+credentials.json
+api_keys.txt
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.project
+.pydevproject
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Logs
+logs/
+*.log
+
+# Cache (project-specific)
+cache/
+*.cache
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git-related
+.git/hooks/pre-commit.local
+
+# Pre-commit framework
+.pre-commit-config.yaml.local
