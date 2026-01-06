@@ -171,15 +171,20 @@ type = linux
 
 #### 2. Configurer les clés API
 
-Modifier `src/caching/constants.py`:
+Créer un fichier `.env` à la racine du projet:
 
-```python
-# Google GenAI API Key (https://aistudio.google.com)
-GENAI_API_KEY = "votre_clé_genai_ici"
-
-# NVD NIST API Key (https://nvd.nist.gov/developers/request-an-api-key)
-NVD_NIST_CPE_API_KEY = "votre_clé_nvd_ici"
+```bash
+cat > .env << 'EOF'
+GENAI_API_KEY=votre_clé_genai_ici
+NVD_NIST_CPE_API_KEY=votre_clé_nvd_ici
+EOF
 ```
+
+**Où obtenir les clés:**
+- **Google GenAI API Key**: https://aistudio.google.com
+- **NVD NIST API Key**: https://nvd.nist.gov/developers/request-an-api-key
+
+⚠️ **Important**: Ne jamais ajouter `.env` à git! Le fichier est automatiquement ignoré.
 
 #### 3. (Optionnel) Configurer la visualisation réseau
 
@@ -277,12 +282,12 @@ La documentation complète est organisée comme suit:
 
 ### Légende des fichiers
 
-| Fichier | Langue | Audience | Contenu |
-|---------|--------|----------|---------|
-| QUICK_START.md | FR | Débutants | Installation et premiers pas |
-| INSTALLATION.md | FR | Admin/DevOps | Configuration avancée |
-| STRUCTURE.md | FR | Développeurs | Architecture du code |
-| HARDWARE_SCANNING.md | FR | Tech | Détails technique scanning CPU |
-| NETWORK_VISUALIZATION.md | FR | Tech | Détails technique visualisation |
-| SCAN.md | FR | Tech | Configuration nmap/network |
-| DOCUMENTATION.md | EN | Développeurs | Référence API/code détaillée |
+| Fichier | Langue | Contenu |
+|---------|--------|----------|
+| QUICK_START.md | FR | Installation et premiers pas |
+| INSTALLATION.md | FR | Configuration avancée |
+| STRUCTURE.md | FR | Architecture du code |
+| HARDWARE_SCANNING.md | FR | Détails technique scanning CPU |
+| NETWORK_VISUALIZATION.md | FR | Détails technique visualisation |
+| SCAN.md | FR | Configuration nmap/network |
+| DOCUMENTATION.md | EN | Référence API/code détaillée |
