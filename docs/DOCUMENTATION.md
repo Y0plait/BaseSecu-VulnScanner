@@ -1,257 +1,400 @@
-# Vulnerability Scanner - Doxygen Documentation Summary
+# Technical Documentation
+
+> Complete API reference and implementation details for developers
 
 ## Overview
-All Python modules in the vulnerability scanner project have been thoroughly documented in Doxygen format. This documentation provides:
+
+This document provides comprehensive technical documentation for the vulnerability scanner codebase. All Python modules include Doxygen-format docstrings with:
 - Clear module purposes and responsibilities
-- Detailed function signatures with @param and @return tags
+- Detailed function signatures with `@param`, `@return`, `@throws` tags
 - Implementation algorithms and design decisions
 - Error handling strategies
 - Cache structures and data formats
 - Integration points between modules
 
-## Documented Modules
+## Table of Contents
 
-### 1. main.py
-**Purpose:** System orchestrator that coordinates the entire vulnerability scanning workflow
+1. [Core Modules](#core-modules)
+2. [Data Structures](#data-structures)
+3. [Design Patterns](#design-patterns)
+4. [API Reference](#api-reference)
+5. [Cache Structures](#cache-structures)
+6. [Error Handling](#error-handling)
 
-**Documentation Added:**
-- Module-level overview explaining the three-phase workflow:
-  1. NVD API connectivity test
-  2. Per-machine vulnerability scanning
-  3. Final summary and reporting
-- Orchestration flow and error handling strategy
-- Dependencies and integration points
+---
 
-### 2. machine_processor.py
-**Purpose:** Package retrieval and CPE generation for individual machines
+## Core Modules
 
-**Functions Documented:**
-- `process_machine_packages()` - SSH retrieval, caching, delta detection
-- `generate_cpes_for_packages()` - Batch AI-based CPE generation with caching
-- `save_package_cache()` - Store package lists for delta detection
+### **src/core/main.py** (391 lines)
 
-**Key Details:**
-- Package retrieval via SSH with OS detection
-- Efficient delta detection reducing unnecessary processing
-- Batch processing strategy for AI queries
+**Purpose:** System orchestrator coordinating the entire vulnerability scanning workflow
 
-### 3. vulnerability_checker.py
-**Purpose:** NVD API queries with rate limiting and error handling
-
-**Functions Documented:**
-- `check_vulnerabilities()` - Rate-limited NVD API queries with 0.6s delay
-- `_handle_vulnerability_check_error()` - Error categorization (404 vs 429 vs 503)
-- `finalize_machine_report()` - Report generation and JSON serialization
-
-**Key Details:**
-- 50 requests/30 seconds API limit enforcement
-- Distinction between 404 (invalid CPE), 429 (rate limit), 503 (unavailable)
-- Rate limit recovery strategy with exponential backoff
-- JSON report generation with CVE.org URLs
-
-### 4. output_formatter.py
-**Purpose:** Colored terminal output with formatted section headers and vulnerability display
-
-**Classes Documented:**
-- `Colors` - ANSI escape sequences for terminal colors and formatting
-
-**Functions Documented:**
-- `print_section()` - Centered headers with visual separators
-- `print_machine_header()` - Machine identification display
-- `print_success()`, `print_info()`, `print_warning()`, `print_error()` - Status indicators
-- `print_vulnerability()` - CVE display with clickable OSC 8 hyperlinks
-- `print_package_list()` - Package formatting
-- `print_stats()` - Final summary statistics
-
-**Key Details:**
-- ANSI color codes (RED, GREEN, BLUE, YELLOW, CYAN, BOLD)
-- OSC 8 protocol for clickable hyperlinks in modern terminals
-- Status indicator symbols (✓, ✗, ⚠, ℹ)
-
-### 5. report_generator.py
-**Purpose:** JSON vulnerability report generation with CVE URLs
-
-**Functions Documented:**
-- `generate_cve_url()` - Creates cve.mitre.org report links
-- `save_machine_report()` - Generates timestamped JSON reports per machine
-- `get_total_vulnerabilities_from_report()` - Statistics helper
-
-**Key Details:**
-- JSON report structure with CPE→CVE mappings
-- Timestamp format (ISO 8601)
-- CVE.org URL standards
-- Report file location: `machines/{machine}/vulnerability_report.json`
-
-### 6. cache_db.py
-**Purpose:** SQLite caching for NVD API responses
-
-**Functions Documented:**
-- `get_db()` - Database initialization with schema setup
-- `get_vulnerabilities()` - Cache-first CVE query strategy
-- `sync_modified_cves()` - Optional cache refresh from NVD
-
-**Database Schema Documented:**
-- **cpe_index:** Tracks queried CPEs (cpe_string, last_fetched timestamp)
-- **vulnerabilities:** Stores CVE data (cpe_string, cve_id, description)
-
-**Key Details:**
-- Cache-first lookup reducing API calls
-- nvdlib integration for NVD API
-- Timestamp tracking for cache freshness
-
-### 7. cpe_matcher.py
-**Purpose:** AI-powered CPE generation from package names using Google Generative AI
-
-**Functions Documented:**
-- `ask_for_cpe()` - Batch CPE generation via Gemini model
-
-**Key Details:**
-- Batch processing for 500+ packages in single API call
-- CPE 2.3 format specification
-- Thinking budget configuration (set to 0 for fast responses)
-- Error handling with graceful degradation
-
-### 8. pkg_finder.py
-**Purpose:** SSH-based package retrieval with intelligent caching
-
-**Functions Documented:**
-- `get_installed_packages_linux()` - SSH-based package retrieval with OS detection
-  - Supports: Debian/Ubuntu (apt), RedHat/Fedora (dnf), Alpine (apk)
-  - Comprehensive sanitization for multiple output formats
-  - Connection pooling and error handling
-  
-- `get_new_packages()` - Delta detection with package caching
-  - Identifies newly installed/removed packages
-  - Avoids regenerating CPEs for unchanged packages
-  
-- `get_cached_cpes()` - CPE cache lookup with validity filtering
-  - Filters out 404-marked invalid CPEs
-  - Returns only valid CPEs for vulnerability checking
-  
-- `cache_cpes()` - Stores generated CPEs with validity tracking
-  - Merges with existing cache
-  - Pretty-printed JSON format
-  
-- `mark_cpe_invalid()` - Marks 404 CPEs for future skipping
-  - Distinguishes invalid CPEs from temporary API errors
-  - Prevents redundant API queries
-  
-- `get_packages_needing_cpe_generation()` - Filters packages without cached CPEs
-  - Optimizes AI API usage by skipping cached packages
-  - Logs caching statistics
-
-**Two-Level Caching Strategy Documented:**
-1. **Package Cache:** `machines/{machine}/installed_packages.json`
-   - Delta detection (new/removed packages)
-   
-2. **CPE Cache:** `machines/cpe_cache.json` (global)
-   - Format: `{package: [{"cpe": "...", "valid": true/false}]}`
-   - Validity tracking (404 errors)
-
-**Sanitization Logic Documented:**
-- apt format: `package/distribution version` → extract package name
-- dnf format: `package.arch version` → extract package name
-- Metadata removal: `[installed]` tags, version info
-- Validation: alphanumeric start or dash prefix
-
-## Documentation Format
-
-All modules follow consistent Doxygen conventions:
-
-### File-Level Documentation
+**CLI Interface:**
 ```python
-"""
-@file filename.py
-@brief One-line description
-
-Extended description explaining purpose and responsibilities.
-
-@author Security Team
-@date 2025-12-24
-@version 1.0
-
-@details
-Detailed implementation notes, design decisions, and integration information.
-"""
+python main.py [OPTIONS]
+  --inventory FILE          # Configuration file (default: inventory.ini)
+  --flush-cache            # Remove all caches before scanning
+  --force-check            # Check all packages (ignore delta detection)
+  --report-only            # Generate HTML from cache without scanning
+  --help                   # Show help message
 ```
 
-### Function Documentation
-```python
-def function_name(param1, param2) -> return_type:
-    """
-    Brief one-line description.
-    
-    @param param1 type Description of param1
-    @param param2 type Description of param2
-    
-    @return type Description of return value
-    
-    @details
-    Extended explanation including:
-    - Algorithm/approach
-    - Cache structures (with @code blocks)
-    - Error handling strategy
-    - Edge cases
-    
-    @note Additional important information
-    
-    @throws ExceptionType Explanation of when/why this is raised
-    """
+**Main Workflow:**
+1. Parse arguments and load inventory
+2. Initialize Google GenAI API
+3. Test NVD API connectivity
+4. For each machine:
+   - Retrieve installed packages
+   - Generate CPEs for packages
+   - Retrieve hardware information
+   - Generate CPEs for hardware
+   - Query NVD for vulnerabilities
+   - Generate JSON report
+5. Aggregate and generate HTML report
+
+**Key Functions:**
+- `main()` - Entry point with full orchestration
+- `parse_arguments()` - CLI argument parsing
+- `flush_all_caches()` - Remove cache directories and database
+
+---
+
+### **src/acquisition/machine_processor.py** (250+ lines)
+
+**Purpose:** Machine-level data acquisition and CPE generation orchestration
+
+**Responsibilities:**
+- SSH connection and package discovery
+- Hardware information retrieval
+- CPE generation delegation to `cpe_matcher`
+- Delta detection and caching
+
+**Key Functions:**
+
+#### `process_machine_packages(config, machine) -> tuple`
+- **Input:** ConfigParser with machine section, machine name
+- **Output:** (all_packages: list, new_packages: list)
+- **Process:**
+  1. Check package cache for previous run
+  2. Call `pkg_finder.get_installed_packages_linux()`
+  3. Detect new/removed packages (delta)
+  4. Save updated cache
+  5. Log statistics
+
+#### `generate_cpes_for_packages(packages, machine, cpe_matcher) -> dict`
+- **Input:** Package list, machine name, CPE matcher instance
+- **Output:** `{package_name: [cpe_string, ...]}`
+- **Process:**
+  1. Check CPE cache for existing entries
+  2. Filter packages needing generation
+  3. Call `cpe_matcher.ask_for_cpe()` with batch
+  4. Save and return results
+
+#### `process_machine_hardware(config, machine) -> dict`
+- **Input:** ConfigParser, machine name
+- **Output:** Hardware info dict (vendor, model, family, etc.)
+- **Process:**
+  1. Verify machine type is Linux
+  2. Call `pkg_finder.get_hardware_info()`
+  3. Parse lscpu output
+  4. Log and display results
+
+---
+
+### **src/acquisition/pkg_finder.py** (180+ lines)
+
+**Purpose:** SSH-based package and hardware discovery
+
+**Key Functions:**
+
+#### `get_installed_packages_linux(config, machine) -> list`
+- **SSH Commands by Distribution:**
+  ```bash
+  apt list --installed          # Debian/Ubuntu
+  rpm -qa                       # RedHat/Fedora/CentOS
+  apk list --installed          # Alpine
+  pacman -Q                      # Arch
+  ```
+- **Output Format:** `[("package-name", "version.number")]`
+- **Sanitization:** Removes arch, distribution tags, metadata
+
+#### `get_hardware_info(config, machine) -> dict`
+- **SSH Command:** `lscpu` (standard on all Linux distributions)
+- **Output Structure:**
+  ```python
+  {
+      'vendor_id': 'GenuineIntel',
+      'model_name': 'Intel(R) Xeon(R) Platinum 8280',
+      'family': '6',
+      'model': '85',
+      'stepping': '11',
+      'flags': 'fpu vme de pse tsc msr pae mce ...',
+      'cores': '56',
+      'threads': '2'
+  }
+  ```
+
+#### `get_new_packages(all_packages, machine) -> list`
+- Delta detection between previous and current runs
+- Returns only newly installed/updated packages
+- Reduces CPE generation API calls significantly
+
+---
+
+### **src/matching/cpe_matcher.py** (350+ lines)
+
+**Purpose:** AI-powered CPE generation from package/hardware descriptions
+
+**Model Configuration:**
+- **Model:** Google Gemini Flash 2.5
+- **Temperature:** 0 (deterministic output)
+- **Thinking Budget:** 0 (disabled for speed)
+- **Max Tokens:** 8000
+
+**Key Functions:**
+
+#### `ask_for_cpe(packages, machine, is_hardware=False) -> dict`
+- **Input:** Package list or hardware description, machine name, type flag
+- **Output:** `{package: [cpe_string, ...]}`
+- **Prompting Strategy:**
+  - Batch processing (500+ items in single call when possible)
+  - Specialized prompts for software vs hardware
+  - Context preservation across calls
+
+**CPE Format (CPE 2.3):**
+```
+cpe:2.3:PART:VENDOR:PRODUCT:VERSION:UPDATE:EDITION:LANGUAGE:SW_EDITION:TARGET_SW:TARGET_HW:OTHER
+
+PART: a=application, h=hardware, o=operating system
 ```
 
-## Key Design Patterns Documented
+---
 
-### 1. Two-Level Caching Strategy
-- Package cache for delta detection
-- CPE cache for AI/API result reuse
-- Validity tracking for invalid CPEs
+### **src/caching/cache_db.py** (200+ lines)
 
-### 2. Rate Limiting
-- 0.6 second delay between NVD API calls (50 requests/30 seconds)
-- Exponential backoff for 429/503 errors
-- Distinguished from 404 errors (invalid CPEs)
+**Purpose:** SQLite vulnerability database caching
 
-### 3. Multi-Distribution Support
-- OS detection via /etc/os-release
-- Sanitization handling both apt and dnf formats
-- Graceful degradation for unknown distributions
+**Database File:** `cache/vulnerability_cache.db`
 
-### 4. Error Handling
-- SSH connection failures
-- API rate limiting and unavailability
-- JSON parsing and file I/O errors
-- Invalid CPE handling (404 vs temporary errors)
+**Schema:**
+```sql
+CREATE TABLE cpe_index (
+    id INTEGER PRIMARY KEY,
+    cpe_string TEXT UNIQUE NOT NULL,
+    last_fetched TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
-### 5. Modular Architecture
-- Separation of concerns (SSH, AI, API, caching, formatting, reporting)
-- Clear integration points
-- Dependency injection where appropriate
+CREATE TABLE vulnerabilities (
+    id INTEGER PRIMARY KEY,
+    cpe_string TEXT NOT NULL,
+    cve_id TEXT NOT NULL,
+    description TEXT,
+    cached_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(cpe_string, cve_id),
+    FOREIGN KEY(cpe_string) REFERENCES cpe_index(cpe_string)
+);
+```
 
-## Usage for Code Maintenance
+**Key Functions:**
 
-These Doxygen-formatted docstrings enable:
+#### `get_db() -> sqlite3.Connection`
+- Singleton pattern with lazy initialization
+- Auto-creates tables if missing
 
-1. **IDE Integration:** IntelliSense/autocomplete in VSCode, PyCharm
-2. **Documentation Generation:** Sphinx, Doxygen, or HTML docs
-3. **Code Understand:** New developers quickly grasp module responsibilities
-4. **Refactoring Safety:** Clear contracts between modules
-5. **Testing:** Documented behavior easier to verify with unit tests
+#### `get_vulnerabilities(cpe_string, api_key) -> list`
+- **Lookup Strategy:** Cache-first, API fallback
+- 80-90% reduction in API calls
+- Local queries (5ms) vs network calls (500ms+)
 
-## Next Steps
+---
 
-With complete documentation in place:
-1. Consider generating HTML documentation with Sphinx: `sphinx-build -b html . _build`
-2. Add unit tests for each module following documented behavior
-3. Set up continuous integration to validate documentation against code
-4. Consider API versioning for backward compatibility
-5. Add usage examples to module docstrings as needed
+### **src/reporting/vulnerability_checker.py** (200+ lines)
 
-## Documentation Quality Metrics
+**Purpose:** NVD API querying with rate limiting and error handling
 
-- **8/8 modules** documented (100%)
-- **30+ functions** documented with full signatures
-- **2 database tables** documented with schema details
-- **Cache structures** documented with format examples
-- **Algorithm details** explained in @code blocks
-- **Error handling** strategies documented
-- **Integration points** clearly marked
+**API Configuration:**
+- **Rate Limit:** 50 requests/30 seconds (with API key)
+- **Delay:** 0.6 seconds between requests
+- **Timeout:** 30 seconds per request
+
+**Error Handling:**
+
+| HTTP Status | Meaning | Action |
+|-------------|---------|--------|
+| 200 | Success | Cache results |
+| 404 | Invalid CPE | Mark as invalid, skip future |
+| 429 | Rate limit exceeded | Exponential backoff, retry |
+| 503 | Service unavailable | Exponential backoff, retry |
+
+---
+
+### **src/reporting/report_generator.py** (150+ lines)
+
+**Purpose:** JSON vulnerability report generation
+
+**Report Structure:**
+```json
+{
+  "machine": "srv01",
+  "timestamp": "2025-01-06T18:30:00Z",
+  "vulnerabilities": {
+    "cpe:2.3:a:apache:log4j:2.14.1:*:*:*:*:*:*:*": [
+      {
+        "cve_id": "CVE-2021-44228",
+        "description": "Apache Log4j2...",
+        "cve_url": "https://nvd.nist.gov/vuln/detail/CVE-2021-44228"
+      }
+    ]
+  }
+}
+```
+
+---
+
+### **src/reporting/output_formatter.py** (250+ lines)
+
+**Purpose:** Colored terminal output with formatted sections
+
+**ANSI Color Codes:**
+```python
+class Colors:
+    RED = '\033[91m'      # Errors
+    GREEN = '\033[92m'    # Success
+    YELLOW = '\033[93m'   # Warnings
+    BLUE = '\033[94m'     # Info
+    CYAN = '\033[96m'     # Headers
+    BOLD = '\033[1m'      # Emphasis
+```
+
+---
+
+## Cache Structures
+
+### Package Cache
+**File:** `cache/machines/{machine}/installed_packages.json`
+
+```json
+{
+  "timestamp": "2025-01-06T18:00:00Z",
+  "packages": [
+    ["openssh-server", "1:7.4p1-21"],
+    ["openssl", "1.1.1k-1+deb9u1"]
+  ]
+}
+```
+
+### CPE Cache
+**File:** `cache/cpe_cache.json`
+
+```json
+{
+  "openssh-server": [
+    {
+      "cpe": "cpe:2.3:a:openssh:openssh:7.4p1:*:*:*:*:*:*:*",
+      "valid": true
+    }
+  ]
+}
+```
+
+---
+
+## Design Patterns
+
+### 1. Two-Level Caching
+- **Level 1:** Package delta detection (avoids regenerating CPEs)
+- **Level 2:** CPE-to-CVE mapping (avoids redundant API calls)
+
+### 2. Rate Limiting with Exponential Backoff
+```python
+attempt = 0
+while attempt < MAX_RETRIES:
+    try:
+        response = nvdlib.searchCPE(cpe, key=api_key)
+        return response
+    except HTTPError(429):  # Rate limited
+        wait_time = 2 ** attempt
+        time.sleep(wait_time)
+        attempt += 1
+```
+
+### 3. Graceful Degradation
+Each layer handles its own errors:
+- SSH Layer: Connection failures → skip machine, log error
+- AI Layer: API errors → use default CPE, log warning
+- NVD API Layer: Rate limiting → retry with backoff
+- Report Generation: Missing data → skip sections, generate partial report
+
+---
+
+## Integration Points
+
+```
+main.py
+  ├─ machine_processor.py
+  │   ├─ pkg_finder.py (SSH)
+  │   └─ cpe_matcher.py (GenAI)
+  ├─ vulnerability_checker.py (NVD API)
+  │   └─ cache_db.py (SQLite)
+  ├─ report_generator.py (JSON)
+  ├─ output_formatter.py (Terminal)
+  └─ html_report_generator.py (HTML)
+      ├─ network_visualizer.py (SVG)
+      └─ templates/vulnerability_report.html (Jinja2)
+```
+
+---
+
+## Performance Considerations
+
+### API Optimization
+- Cache-first strategy reduces NVD API calls by 80-90%
+- Batch CPE generation (500+ items per call)
+- Rate limiting prevents IP bans and errors
+
+### Memory Usage
+- Streams JSON report generation (not loaded entirely)
+- SQLite for large vulnerability datasets (not in-memory)
+- Generator patterns for large package lists
+
+### Network Impact
+- Delta detection reduces SSH calls
+- Minimal Nmap scanning for network visualization
+- Base64 embedding avoids external file dependencies
+
+---
+
+## Debugging Tips
+
+### Enable Debug Logging
+```python
+import logging
+logging.basicConfig(level=logging.DEBUG)
+```
+
+### Trace API Calls
+```bash
+tail -f logs/vulnerability_scan_*.log | grep "API\|NVD"
+```
+
+### Inspect Cache Files
+```bash
+# View package cache
+cat cache/machines/srv01/installed_packages.json | python -m json.tool
+
+# View CPE cache
+cat cache/cpe_cache.json | python -m json.tool
+
+# Query SQLite directly
+sqlite3 cache/vulnerability_cache.db "SELECT COUNT(*) FROM vulnerabilities;"
+```
+
+---
+
+## References
+
+- [CPE Specification](https://nvd.nist.gov/products/cpe)
+- [NVD API Documentation](https://nvd.nist.gov/developers)
+- [Google Generative AI](https://ai.google.dev)
+- [Paramiko SSH Library](https://www.paramiko.org)
+- [Jinja2 Templates](https://jinja.palletsprojects.com)

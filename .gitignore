@@ -2,3 +2,19 @@
 logs/*
 constants.py
 cache/*
+nmap-formatter
+docs/doxygen/html/*
+# Environment variables and secrets
+.env
+.env.local
+.env.*.local
+
+# API keys and credentials
+**/constants_local.py
+
+# Cache and temporary files
+cache/
+logs/
+__pycache__/
+*.pyc
+.DS_Store

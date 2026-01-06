@@ -1,237 +1,224 @@
-# Network Scanner Setup Guide
+# Configuration du scanning réseau
 
-## Overview
+> Guide de configuration du script `visualnet-scanner.sh` pour générer des diagrammes de topologie réseau
 
-The `visualnet-scanner.sh` script is a bash-based network scanning utility that combines **Nmap** for network discovery with **nmap-formatter** to generate visual SVG network diagrams. This tool allows you to scan networks and automatically generate graphical representations of discovered hosts and services.
+## Vue d'ensemble
 
-## Features
+Le script `visualnet-scanner.sh` utilise **Nmap** pour scanner le réseau et **nmap-formatter** pour générer des diagrammes SVG visuels de la topologie. Ces diagrammes sont intégrés automatiquement dans les rapports HTML générés par le scanner de vulnérabilités.
 
-- **Network Scanning**: Uses Nmap to perform fast network scans
-- **XML Output**: Converts Nmap results to structured XML format
-- **Visual Mapping**: Generates SVG diagrams of the network topology
-- **Dependency Validation**: Automatically checks for required dependencies before execution
+## Prérequis
 
-## Prerequisites
+### Dépendances système
 
-Before running the scanner, ensure you have the following installed:
-
-### System Requirements
-
-- **Nmap**: Network mapping and port scanning utility
-- **Graphviz**: Graph visualization software (specifically the `dot` command)
-- **nmap-formatter**: Binary formatter for converting Nmap output to various formats
+- **Nmap**: Utilitaire de scan réseau et cartographie de ports
+- **Graphviz**: Logiciel de visualisation de graphes (commande `dot`)
+- **nmap-formatter**: Convertisseur Nmap → SVG
 
 ## Installation
 
-### Step 1: Install Nmap
+### 1. Installer Nmap
 
-#### macOS
+**macOS:**
 ```bash
 brew install nmap
 ```
 
-#### Linux (Debian/Ubuntu)
+**Debian/Ubuntu:**
 ```bash
 sudo apt-get update
 sudo apt-get install nmap
 ```
 
-#### Linux (Fedora/RHEL)
+**Fedora/RHEL:**
 ```bash
 sudo dnf install nmap
 ```
 
-### Step 2: Install Graphviz
+### 2. Installer Graphviz
 
-#### macOS
+**macOS:**
 ```bash
 brew install graphviz
 ```
 
-#### Linux (Debian/Ubuntu)
+**Debian/Ubuntu:**
 ```bash
-sudo apt-get install graphviz
+sudo apt-get install graphviz graphviz-dev
 ```
 
-#### Linux (Fedora/RHEL)
+**Fedora/RHEL:**
 ```bash
-sudo dnf install graphviz
+sudo dnf install graphviz graphviz-devel
 ```
 
-### Step 3: Install nmap-formatter
+### 3. Installer nmap-formatter
 
-The `nmap-formatter` tool is available through multiple installation methods. Choose the one that best fits your environment:
+#### Option A: Avec Go (recommandé)
 
-#### Option A: Go Install (Recommended for Go Users)
-
-Requires Go 1.18 or later to be installed on your system.
+Nécessite Go 1.18+ installé.
 
 ```bash
 go install github.com/vdjagilev/nmap-formatter/v3@latest
+cp ~/go/bin/nmap-formatter ./
 ```
 
-The binary will be installed to your Go workspace (typically `$GOPATH/bin` or `~/go/bin`).
+#### Option B: Binaire pré-compilé
 
-#### Option B: Download Pre-compiled Binary
-
-Download the appropriate binary for your system from the [nmap-formatter releases page](https://github.com/vdjagilev/nmap-formatter/releases):
+Télécharger depuis [Releases GitHub](https://github.com/vdjagilev/nmap-formatter/releases):
 
 ```bash
-# For Linux x86_64
+# macOS
 VERSION=v3.0.0
-curl https://github.com/vdjagilev/nmap-formatter/releases/download/$VERSION/nmap-formatter-linux-amd64.tar.gz --output nmap-formatter.tar.gz -L
-tar -xzvf nmap-formatter.tar.gz
-
-# For macOS (Intel or Apple Silicon, check the releases page for your architecture)
-VERSION=v3.0.0
-curl https://github.com/vdjagilev/nmap-formatter/releases/download/$VERSION/nmap-formatter-darwin-amd64.tar.gz --output nmap-formatter.tar.gz -L
-tar -xzvf nmap-formatter.tar.gz
-```
-
-After extraction, place the `nmap-formatter` binary in the project directory:
-
-```bash
-chmod +x nmap-formatter
+curl -L https://github.com/vdjagilev/nmap-formatter/releases/download/$VERSION/nmap-formatter-darwin-amd64.tar.gz | tar xz
 mv nmap-formatter ./
-```
 
-#### Option C: Compile from Source
+# Linux
+VERSION=v3.0.0
+curl -L https://github.com/vdjagilev/nmap-formatter/releases/download/$VERSION/nmap-formatter-linux-amd64.tar.gz | tar xz
+mv nmap-formatter ./
 
-If you have Go installed:
-
-```bash
-git clone git@github.com:vdjagilev/nmap-formatter.git
-cd nmap-formatter
-go mod tidy
-go build
-cp nmap-formatter /path/to/your/project/
-```
-
-#### Option D: Docker
-
-If you prefer containerization:
-
-```bash
-docker run -v /path/to/xml/file.xml:/opt/file.xml ghcr.io/vdjagilev/nmap-formatter:latest json /opt/file.xml
-```
-
-## Usage
-
-### Basic Syntax
-
-```bash
-./visualnet-scanner.sh [TARGET_NETWORK]
-```
-
-### Parameters
-
-- `TARGET_NETWORK` (optional): The network address to scan (e.g., `192.168.1.0/24`, `10.0.0.1`)
-  - If not provided, you will be prompted to enter it interactively
-
-### Examples
-
-#### Interactive Mode
-```bash
-./visualnet-scanner.sh
-# You will be prompted to enter the network address
-```
-
-#### Direct Scan
-```bash
-./visualnet-scanner.sh 192.168.1.0/24
-```
-
-#### Single Host Scan
-```bash
-./visualnet-scanner.sh 192.168.1.100
-```
-
-## How It Works
-
-The script performs the following steps:
-
-1. **Dependency Check**: Verifies that `nmap`, `dot`, and the `./nmap-formatter` binary are available and executable
-2. **Target Input**: Prompts for network address if not provided as an argument
-3. **Nmap Scan**: Executes a fast Nmap scan (`-T4 -F` flags) on the target network, saving output to `output.xml`
-4. **Visualization**: Pipes the Nmap output through `nmap-formatter` to convert to DOT format, then to Graphviz's `dot` command to generate an SVG image
-5. **Output**: Produces `test.svg` containing a visual representation of the network
-
-### Output Files
-
-- **output.xml**: Raw Nmap scan results in XML format
-- **nmap_errors.log**: Error log from the Nmap scan (if any errors occur)
-- **test.svg**: SVG visualization of the network topology
-
-## Troubleshooting
-
-### Error: "Required command 'nmap' is not installed"
-**Solution**: Install Nmap using the appropriate package manager for your system (see Installation section above).
-
-### Error: "Required command 'dot' is not installed"
-**Solution**: Install Graphviz, which includes the `dot` command.
-
-### Error: "'./nmap-formatter' not found in the current directory"
-**Solution**: Ensure the `nmap-formatter` binary is in the same directory as the script. If using Go install, you may need to copy the binary from your Go workspace to the project directory.
-
-### Error: "'./nmap-formatter' is found but is not executable"
-**Solution**: Make the binary executable:
-```bash
+# Rendre exécutable
 chmod +x nmap-formatter
 ```
 
-### Error during Nmap scan
-**Solution**: Check `nmap_errors.log` for details. Common issues include:
-- Insufficient permissions (may need `sudo` for privileged scans)
-- Network unreachable
-- Invalid network address format
-
-## Advanced Usage
-
-### Running with Elevated Privileges
-
-For comprehensive network scanning (including OS detection and service version detection), you may need elevated privileges:
+#### Option C: Compiler depuis la source
 
 ```bash
+git clone https://github.com/vdjagilev/nmap-formatter.git
+cd nmap-formatter
+go build
+cp nmap-formatter /chemin/vers/le/projet/
+cd /chemin/vers/le/projet
+```
+
+### Vérifier l'installation
+
+```bash
+nmap --version
+dot -V
+./nmap-formatter --version
+```
+
+## Utilisation
+
+### Syntaxe de base
+
+```bash
+./visualnet-scanner.sh [RÉSEAU_CIBLE]
+```
+
+### Paramètres
+
+- `RÉSEAU_CIBLE` (optionnel): Adresse réseau à scanner
+  - Format: `192.168.1.0/24`, `10.0.0.1`, `example.com`, etc.
+  - Si omis, un prompt interactive demande l'adresse
+
+### Exemples
+
+```bash
+# Mode interactif
+./visualnet-scanner.sh
+
+# Scanner un réseau entier
+./visualnet-scanner.sh 192.168.1.0/24
+
+# Scanner un hôte unique
+./visualnet-scanner.sh 192.168.1.100
+
+# Scanner avec droits root (détection OS, versions services)
 sudo ./visualnet-scanner.sh 192.168.1.0/24
 ```
 
-### Customizing Nmap Parameters
+## Fonctionnement
 
-To modify scan speed or options, edit the script and change the Nmap command line:
+Le script effectue les étapes suivantes:
+
+1. **Vérification dépendances**: Contrôle que `nmap`, `dot` et `nmap-formatter` sont disponibles
+2. **Saisie cible**: Demande l'adresse réseau si non fournie
+3. **Scan Nmap**: Lance un scan Nmap rapide (`-T4 -F`) sur le réseau cible
+4. **Formatage**: Convertit la sortie Nmap en format DOT, puis génère SVG via Graphviz
+5. **Génération fichier**: Produit `test.svg` avec la topologie visuelle
+
+### Fichiers générés
+
+| Fichier | Description |
+|---------|-------------|
+| `output.xml` | Résultat Nmap brut en XML |
+| `test.svg` | Diagramme SVG de la topologie |
+| `nmap_errors.log` | Erreurs Nmap (si présentes) |
+
+## Intégration avec le scanner de vulnérabilités
+
+Les diagrammes SVG sont **automatiquement intégrés** dans le rapport HTML si:
+
+1. Le binaire `nmap-formatter` est présent
+2. L'hôte est accessible via Nmap
+3. La génération SVG réussit
+
+Si la visualisation échoue, le rapport HTML s'affiche quand même sans les diagrammes.
+
+### Flux automatique
 
 ```bash
-# Current (fast scan)
-nmap -T4 -F "$TARGET" -oX output.xml
+# Scan du scanner de vulnérabilités
+python main.py --inventory inventory.ini
 
-# More thorough scan
-nmap -sV -sC -A "$TARGET" -oX output.xml
+# 1. Scan paquets + vulnérabilités
+# 2. Génère rapport JSON
+
+# 3. Génération HTML:
+#    - Agrège rapports JSON
+#    - Pour chaque machine: exécute visualnet-scanner.sh
+#    - Convertit SVG en base64
+#    - Intègre dans rapport HTML
+#    - Sauvegarde cache/vulnerability_report.html
 ```
 
-## Integration with Python Project
+## Options avancées
 
-The scanner can be integrated with the Python vulnerability scanning system:
+### Scan plus détaillé
+
+Pour détection OS et versions services (plus lent):
 
 ```bash
-# Scan network
-./visualnet-scanner.sh 192.168.1.0/24
-
-# Identified hosts can then be added to inventory.ini
-# and processed by the main.py vulnerability scanner
+sudo ./visualnet-scanner.sh 192.168.1.0/24 -sV -sC -A
 ```
 
-## Security Considerations
+Éditer le script pour modifier les paramètres Nmap.
 
-- **Permissions**: Only run network scans on networks you own or have explicit permission to scan
-- **Credentials**: Never commit nmap-formatter binaries with security concerns to version control
-- **Network Impact**: Fast scans (`-T4 -F`) are less intrusive; adjust timing if network is sensitive
+### Scan sans visualisation
 
-## References
+Si Nmap est disponible mais pas `nmap-formatter`:
 
-- [Nmap Official Documentation](https://nmap.org/book/)
-- [nmap-formatter GitHub Repository](https://github.com/vdjagilev/nmap-formatter)
-- [nmap-formatter Wiki](https://github.com/vdjagilev/nmap-formatter/wiki)
-- [Graphviz Documentation](https://graphviz.org/documentation/)
+```bash
+nmap 192.168.1.0/24 -oX output.xml
+```
 
-## License
+## Dépannage
 
-This script documentation is provided as part of the network vulnerability assessment project.
+| Erreur | Solution |
+|--------|----------|
+| "nmap' not installed" | Installer Nmap via package manager |
+| "'dot' not found" | Installer Graphviz |
+| "'nmap-formatter' not found" | Placer le binaire à la racine du projet |
+| "'nmap-formatter' not executable" | `chmod +x nmap-formatter` |
+| Erreur Nmap | Vérifier `nmap_errors.log` |
+| Pas de droits d'accès réseau | Essayer avec `sudo` |
+
+## Considérations de sécurité
+
+- **Permission légale**: Ne scanner que les réseaux que vous possédez ou avez explicitement le droit de scanner
+- **Restrictions réseau**: Les scans rapides (`-T4 -F`) minimisent l'impact réseau
+- **Gestion binaire**: Vérifier l'intégrité du binaire `nmap-formatter` avant utilisation
+
+## Références
+
+- [Nmap Official](https://nmap.org)
+- [nmap-formatter GitHub](https://github.com/vdjagilev/nmap-formatter)
+- [Graphviz](https://graphviz.org)
+
+## Prochaines étapes
+
+- [Guide d'installation complet](INSTALLATION.md)
+- [Scanning matériel](HARDWARE_SCANNING.md)
+- [Visualisation réseau](NETWORK_VISUALIZATION.md)

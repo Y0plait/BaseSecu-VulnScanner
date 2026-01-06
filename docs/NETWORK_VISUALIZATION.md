@@ -1,36 +1,77 @@
-# Network Visualization Integration - Implementation Summary
+# Visualisation du réseau
 
-## Overview
+> Intégration de diagrammes SVG de topologie réseau dans les rapports HTML
 
-Integrated network topology visualization into the HTML vulnerability report using the `visualnet-scanner.sh` script. SVG network diagrams are now generated for each scanned host and embedded directly into the HTML report.
+## Vue d'ensemble
 
-## Changes Made
+Le scanner génère des **diagrammes SVG visuels** de la topologie réseau et les **intègre automatiquement** dans les rapports HTML. Cela permet de visualiser rapidement les hôtes, ports et services découverts lors des scans.
 
-### 1. New Module: `src/reporting/network_visualizer.py`
-Created a new module to handle network visualization generation:
+## Fonctionnalités
 
-**Key Functions:**
-- `generate_network_svg_for_host(host_address, machine_name)`: Executes visualnet-scanner.sh for a specific host and generates SVG
-- `svg_to_base64(svg_file_path)`: Converts SVG to base64 for embedding
-- `read_svg_content(svg_file_path)`: Reads SVG file as text for inline embedding
-- `generate_network_visualizations(machines_config)`: Batch generation for all machines
+### 1. Génération SVG automatique
 
-**Features:**
-- Automatic execution of visualnet-scanner.sh script
-- Error handling with fallbacks
-- Timeout protection (5 minutes per scan)
-- File validation (checks existence, size, permissions)
-- Logging of all operations
+- **Source**: Script `visualnet-scanner.sh` basé sur Nmap
+- **Outils**: Nmap (discovery) + nmap-formatter (conversion) + Graphviz (SVG)
+- **Déclenchement**: Automatique lors de génération rapport HTML
+- **Fallback**: Rapport généré même si SVG échoue
 
-### 2. Updated HTML Template: `templates/vulnerability_report.html`
+### 2. Intégration dans rapports HTML
 
-Added Network Topology section to each machine report:
+- **Embedding direct**: SVG intégré en base64 (pas de dépendances externes)
+- **Par machine**: Un diagramme par hôte scanné
+- **Responsive**: Scrollbar horizontal pour diagrammes larges
+- **Style cohérent**: Intégration avec CSS du rapport
+
+### 3. Contenu du diagramme
+
+Le SVG affiche:
+- Hôtes découverts (nœuds)
+- Ports ouverts par hôte
+- Services identifiés
+- Versions de service
+- Connexions entre hôtes (le cas échéant)
+
+## Architecture
+
+### Module network_visualizer.py
+
+**Responsabilité:** Générer SVG et les préparer pour intégration HTML
+
+**Fonctions:**
+
+#### `generate_network_svg_for_host(host_address, machine_name)`
+- Exécute `visualnet-scanner.sh` pour un hôte
+- Récupère SVG généré
+- Gère timeouts (5 minutes max)
+- Retourne contenu SVG ou None si erreur
+
+#### `svg_to_base64(svg_file_path)`
+- Convertit fichier SVG en base64
+- Permet embedding direct dans HTML
+- Élimine dépendances de fichiers
+
+#### `read_svg_content(svg_file_path)`
+- Lit SVG comme texte brut
+- Prépare pour injection dans HTML
+- Valide fichier existe et accessible
+
+#### `generate_network_visualizations(machines_config)`
+- Appelle pour chaque machine
+- Agrège tous SVG
+- Retourne dict: `{machine_name: {svg_content, ...}}`
+- Gère les erreurs sans bloquer
+
+### Template HTML
+
+**Template:** `templates/vulnerability_report.html`
+
+**Section réseau:**
 ```html
 <!-- Network Topology Visualization -->
 {% if network_visualizations.get(machine_name, {}).get('svg_content') %}
     <div class="border-t border-gray-200 p-6 bg-gray-50">
-        <h4 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-            <span class="material-icons mr-2">share</span>
+        <h4 class="text-lg font-semibold text-gray-900 mb-4">
+            <span class="material-icons">share</span>
             Network Topology
         </h4>
         <div class="bg-white border border-gray-200 rounded-lg p-4 overflow-x-auto">
@@ -40,215 +81,131 @@ Added Network Topology section to each machine report:
 {% endif %}
 ```
 
-**Features:**
-- SVG is embedded directly in HTML (no external file dependencies)
-- Uses `|safe` filter to render SVG markup
-- Conditional rendering (only shows if SVG was generated)
-- Responsive design with horizontal scroll for large diagrams
-- Material Design icon for visual consistency
+**Caractéristiques:**
+- Rendu SVG uniquement si contenu disponible
+- Filtre `|safe` pour rendu markup SVG
+- Scrollbar horizontale pour grands diagrammes
+- Design responsive
 
-### 3. Updated `src/reporting/html_report_generator.py`
+## Flux de génération
 
-**Modified Function:** `generate_html_report(output_file=None, machines_config=None)`
+```
+Scan vulnérabilités
+├─ Collecte paquets + versions
+├─ Requête NVD CVE
+└─ Génère cache/machines/{machine}/vulnerability_report.json
 
-**Changes:**
-- Added optional `machines_config` parameter
-- Integrated network visualization generation
-- Network visualizations passed to template context
-- Error handling for visualization failures
+Génération rapport HTML
+├─ Agrège rapports JSON
+├─ Pour chaque machine:
+│  ├─ Exécute: visualnet-scanner.sh <host>
+│  ├─ Récupère: test.svg généré
+│  ├─ Convertit: SVG → base64 (ou texte brut)
+│  └─ Stocke: {machine_name: {svg_content: ...}}
+├─ Applique template Jinja2
+├─ Insère SVG dans sections machines
+└─ Génère: cache/vulnerability_report.html
+```
 
-**Implementation:**
+## Gestion des erreurs
+
+### Fallback gracieux
+
+Si SVG échoue:
+- ✓ Rapport HTML toujours généré
+- ✓ Seules les sections SVG sont omises
+- ✓ Données vulnérabilités affichées complètement
+- ✓ Log d'erreur enregistré
+
+### Causes communes d'échec
+
+| Cause | Impact |
+|-------|--------|
+| Nmap pas installé | SVG non généré, rapport HTML OK |
+| Host non joignable | SVG non généré, rapport HTML OK |
+| Timeout réseau | SVG non généré, rapport HTML OK |
+| nmap-formatter absent | SVG non généré, rapport HTML OK |
+
+## Options de configuration
+
+### Activation/désactivation
+
+La génération SVG est:
+- **Automatique** si `nmap-formatter` est présent
+- **Silencieuse** si dépendances manquantes
+- **Sans blocage** même en cas d'erreur
+
+### Personnalisation
+
+Éditer `src/reporting/network_visualizer.py`:
+
 ```python
-# Generate network visualizations if machines_config provided
-network_visualizations = {}
-if machines_config:
-    try:
-        from src.reporting import network_visualizer as nv
-        logger.info("Generating network visualizations...")
-        network_visualizations = nv.generate_network_visualizations(machines_config)
-    except Exception as e:
-        logger.warning(f"Failed to generate network visualizations: {e}")
+# Timeout pour scan (secondes)
+SCAN_TIMEOUT = 300
+
+# Commande Nmap personnalisée
+# (modifier dans visualnet-scanner.sh)
 ```
 
-### 4. Updated `src/core/main.py`
+## Fichiers générés
 
-**Two Updates:**
-
-#### A. Report-Only Mode (lines 188-220)
-- Now loads inventory and passes machines_config to report generator
-- Allows network SVGs to be regenerated even in report-only mode
-
-#### B. Normal Scan Mode (lines 355-375)
-- Converts ConfigParser to dict format
-- Passes machines_config to `generate_html_report()`
-- Includes network visualizations in final report
-
-## Workflow
+### Temporaires (pendant génération)
 
 ```
-Vulnerability Scanning Process
-│
-├─ Scan machines for packages & vulnerabilities
-├─ Generate vulnerability reports (JSON)
-│
-└─ HTML Report Generation
-   ├─ Aggregate vulnerability data from JSON files
-   ├─ FOR EACH MACHINE:
-   │  ├─ Execute: visualnet-scanner.sh <host_ip>
-   │  ├─ Generate: SVG network topology
-   │  ├─ Read: SVG file content
-   │  └─ Embed: SVG in machine section
-   ├─ Render: Jinja2 HTML template with:
-   │  ├─ Statistics
-   │  ├─ Machine reports
-   │  ├─ Network visualizations
-   │  └─ Vulnerability tables
-   └─ Output: HTML report with integrated SVGs
+output.xml          # Résultat Nmap brut
+test.svg           # Diagramme SVG (avant base64)
+nmap_errors.log    # Erreurs Nmap
 ```
 
-## File Structure
+### Finaux
 
 ```
-cache/machines/
-├── srv01/
-│   ├── vulnerability_report.json
-│   ├── network_topology.svg          ← NEW
-│   ├── cpe_list_srv01.txt
-│   └── installed_packages.json
-├── srv02/
-│   ├── vulnerability_report.json
-│   ├── network_topology.svg          ← NEW
-│   ├── cpe_list_srv02.txt
-│   └── installed_packages.json
-└── srv03/
-    ├── vulnerability_report.json
-    ├── network_topology.svg          ← NEW
-    ├── cpe_list_srv03.txt
-    └── installed_packages.json
-
-cache/vulnerability_report.html       ← Contains embedded SVGs
+cache/vulnerability_report.html  # Rapport avec SVG intégré
 ```
 
-## Usage
+Les SVG **n'existant pas en tant que fichier séparé** dans le rapport final - ils sont intégrés directement en base64.
 
-### Generate Full Report with Network Visualization
-```bash
-python main.py --inventory inventory.ini
-```
-This will:
-1. Scan all machines
-2. Collect packages and vulnerabilities
-3. Generate network SVGs for each host
-4. Create HTML report with embedded network diagrams
+## Limitations
 
-### Generate Report from Cache (with Network SVGs)
-```bash
-python main.py --report-only
-```
-This will:
-1. Load existing vulnerability data
-2. Generate fresh network SVGs (if nmap/visualnet-scanner available)
-3. Create HTML report with network diagrams
+- **Par hôte**: Un SVG par adresse IP/hostname
+- **Pas de hiérarchie**: Diagrammes plats, pas de groupement par sous-réseau
+- **Services simples**: Basé sur résultats Nmap (pas d'analyse profonde)
+- **Pas de temps réel**: Snapshot statique du moment du scan
 
-## Error Handling
+## Dépannage
 
-The network visualization module gracefully handles errors:
-
-1. **Missing visualnet-scanner.sh**: Warning logged, SVG skipped
-2. **Script not executable**: Warning logged, SVG skipped
-3. **Scan timeout** (>5 min): Error logged, SVG skipped
-4. **SVG generation failure**: Error logged, SVG skipped
-5. **Empty SVG file**: Error logged, SVG skipped
-6. **Network issues**: Exception caught, visualization skipped
-
-**Result:** If network visualization fails, the report still generates successfully with all vulnerability data intact.
-
-## Requirements
-
-The feature requires the visualnet-scanner.sh script to be present in the project root:
-- `./visualnet-scanner.sh` - Must be executable
-- Dependencies: `nmap`, `graphviz` (dot command)
-- Optional: `nmap-formatter` binary
-
-If any dependency is missing, network visualization is automatically skipped.
-
-## Technical Details
-
-### SVG Embedding
-- SVGs are read as text and embedded directly in HTML
-- Uses Jinja2's `|safe` filter to preserve SVG markup
-- No data URI encoding needed (keeps HTML readable)
-- Allows interactive SVG (hovering, scrolling within diagram)
-
-### Network Scanning
-- Each machine is scanned individually
-- Scan target: machine's IP address or network
-- Output format: SVG (vector graphics)
-- Timeout: 5 minutes per scan
-- Caching: SVGs stored in machine's cache directory
-
-### Template Variables
-```python
-network_visualizations = {
-    'srv01': {
-        'svg_path': 'cache/machines/srv01/network_topology.svg',
-        'svg_content': '<svg>...</svg>',  # Actual SVG markup
-        'generated': True
-    },
-    'srv02': {
-        'svg_path': None,
-        'svg_content': None,
-        'generated': False  # Generation failed
-    }
-}
-```
-
-## HTML Report Structure
-
-Each machine section now includes:
-
-```html
-<div class="machine-report">
-    <div class="header">Machine name, timestamp, vuln count</div>
-    
-    <!-- NEW: Network Topology Section -->
-    <div class="network-section">
-        <h4>Network Topology</h4>
-        <div class="svg-container">
-            <!-- Embedded SVG diagram -->
-        </div>
-    </div>
-    
-    <div class="stats">Severity distribution</div>
-    <div class="vulnerabilities-table">CVE details</div>
-</div>
-```
-
-## Benefits
-
-1. **Visual Context**: Network topology shows connections and exposed services
-2. **Integrated Report**: No need for separate network diagrams
-3. **Self-Contained**: HTML file includes all SVGs (single file delivery)
-4. **Professional Look**: Clean, modern design with Material Icons
-5. **Responsive**: SVGs scale and scroll appropriately
-6. **Graceful Degradation**: Works even if network scanning fails
-
-## Testing
-
-To test the feature:
+### "SVG not generated"
 
 ```bash
-# Full scan with network visualization
-python main.py --inventory inventory.ini
+# Vérifier Nmap
+nmap --version
 
-# Regenerate report from cache with new SVGs
-python main.py --report-only
+# Vérifier Graphviz
+dot -V
 
-# Check generated report
-open cache/vulnerability_report.html
+# Vérifier nmap-formatter
+./nmap-formatter --version
+
+# Tester directement
+./visualnet-scanner.sh 192.168.1.100
+ls -la test.svg
 ```
 
-Look for:
-- Network Topology sections in each machine report
-- SVG diagrams showing hosts and connections
-- Proper styling and layout of diagrams
+### Diagramme vide ou incorrect
+
+- Vérifier que l'hôte est joignable
+- Essayer scan avec `sudo` pour droits élevés
+- Vérifier logs: `cat nmap_errors.log`
+
+### Rapport HTML sans SVG
+
+- Vérifier les logs du scanner
+- Confirmer que Nmap/Graphviz/nmap-formatter sont installés
+- Données de vulnérabilités devraient quand même être présentes
+
+## Prochaines étapes
+
+- [Configuration scanning réseau](SCAN.md)
+- [Scanning matériel](HARDWARE_SCANNING.md)
+- [Architecture du code](STRUCTURE.md)
+- [Installation complète](INSTALLATION.md)
