@@ -94,6 +94,7 @@ def get_db():
     - cpe_string TEXT: Foreign key to cpe_index
     - cve_id TEXT: CVE identifier (e.g., "CVE-2024-1234")
     - description TEXT: Vulnerability description from NVD
+    - published_date TEXT: CVE publication date from NVD
     Stores actual CVE data for cached CPEs.
     
     Schema design allows:
@@ -110,8 +111,20 @@ def get_db():
                       (cpe_string TEXT PRIMARY KEY, last_fetched TIMESTAMP)''')
     # Stores the CVE IDs linked to those CPEs
     cursor.execute('''CREATE TABLE IF NOT EXISTS vulnerabilities 
-                      (cpe_string TEXT, cve_id TEXT, description TEXT, 
+                      (cpe_string TEXT, cve_id TEXT, description TEXT, published_date TEXT,
                        FOREIGN KEY(cpe_string) REFERENCES cpe_index(cpe_string))''')
+    
+    # Migration: Add published_date column if it doesn't exist (for existing databases)
+    cursor.execute("PRAGMA table_info(vulnerabilities)")
+    columns = [column[1] for column in cursor.fetchall()]
+    if 'published_date' not in columns:
+        try:
+            cursor.execute("ALTER TABLE vulnerabilities ADD COLUMN published_date TEXT")
+            conn.commit()
+            logger.info("Migration: Added published_date column to vulnerabilities table")
+        except Exception as e:
+            logger.debug(f"Migration note: {e}")
+    
     conn.commit()
     return conn
 
@@ -162,8 +175,20 @@ def get_vulnerabilities(cpe_string, api_key=None):
 
         if row:
             print(f"[*] Cache Hit for {cpe_string}. Fetching from local DB...")
-            cursor.execute("SELECT cve_id, description FROM vulnerabilities WHERE cpe_string = ?", (cpe_string,))
-            results = cursor.fetchall()
+            try:
+                # Try to query with published_date column (new schema)
+                cursor.execute("SELECT cve_id, description, published_date FROM vulnerabilities WHERE cpe_string = ? ORDER BY published_date DESC", (cpe_string,))
+                results = cursor.fetchall()
+            except Exception as e:
+                # Fallback for old schema without published_date
+                if 'no such column' in str(e):
+                    logger.debug(f"Old schema detected, querying without published_date: {e}")
+                    cursor.execute("SELECT cve_id, description FROM vulnerabilities WHERE cpe_string = ?", (cpe_string,))
+                    old_results = cursor.fetchall()
+                    # Convert to 3-tuple format with None for published_date
+                    results = [(cve_id, desc, None) for cve_id, desc in old_results]
+                else:
+                    raise
             # Logic: You'd return these to the user now, 
             # then optionally call a 'sync_updates()' function to refresh the index.
             return results
@@ -181,9 +206,11 @@ def get_vulnerabilities(cpe_string, api_key=None):
             extracted_data = []
             for cve in cve_list:
                 desc = cve.descriptions[0].value if cve.descriptions else "No description"
-                cursor.execute("INSERT INTO vulnerabilities (cpe_string, cve_id, description) VALUES (?, ?, ?)", 
-                               (cpe_string, cve.id, desc))
-                extracted_data.append((cve.id, desc))
+                # Extract published date from CVE object
+                published_date = cve.published if hasattr(cve, 'published') else None
+                cursor.execute("INSERT INTO vulnerabilities (cpe_string, cve_id, description, published_date) VALUES (?, ?, ?, ?)", 
+                               (cpe_string, cve.id, desc, published_date))
+                extracted_data.append((cve.id, desc, published_date))
             
             db.commit()
             return extracted_data

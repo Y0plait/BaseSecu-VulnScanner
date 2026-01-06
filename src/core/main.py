@@ -203,6 +203,11 @@ def main():
                         'type': config[machine].get('type', 'linux')
                     }
         
+        # Inform user that SVGs will be regenerated
+        if machines_dict:
+            fmt.print_info(f"Generating network visualizations for {len(machines_dict)} machines...")
+            logger.info(f"Report-only mode: Will generate network SVGs for {len(machines_dict)} machines")
+        
         try:
             html_report_path = html_gen.generate_html_report(machines_config=machines_dict)
             if html_report_path:

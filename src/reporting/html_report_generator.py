@@ -11,14 +11,47 @@ with statistics, filtering, and elegant Material Design styling.
 
 @details
 Features:
-- Aggregates vulnerabilities from all machines
+- Aggregates vulnerabilities from all machines into a comprehensive dashboard
 - Generates statistics (machines scanned, total CVEs, severity distribution)
-- Creates interactive HTML dashboard
-- Uses Tailwind CSS for responsive design
-- Material Design Icons for visual appeal
-- Sortable vulnerability tables
-- Machine-level summaries
-- Severity-based color coding
+- Creates interactive HTML dashboard with sortable tables
+- Uses Tailwind CSS for responsive, modern design
+- Includes Material Design Icons for visual appeal
+- Provides sortable vulnerability tables by CVE, date, severity
+- Shows machine-level summaries with detailed vulnerability breakdowns
+- Implements severity-based color coding (critical/high/medium/low)
+- Embeds network topology diagrams as SVG for each machine
+- Sorts CVEs by publication date (newest first)
+
+**Report Generation:**
+
+1. Aggregate vulnerabilities from all machines
+   - Read machine vulnerability JSON reports
+   - Extract CVE data and metadata
+   - Calculate severity distribution
+   
+2. Process network visualizations
+   - Generate or load SVG topology diagrams
+   - Embed diagrams directly in HTML
+   
+3. Render HTML template
+   - Use Jinja2 to fill template with data
+   - Apply Tailwind CSS styling
+   - Generate interactive dashboard
+
+**Output:**
+
+- HTML File: cache/vulnerability_report.html
+- Viewable in any modern web browser
+- Self-contained (all resources embedded or CDN-linked)
+- Interactive sorting and filtering capabilities
+
+**Sorting:**
+
+CVEs are automatically sorted by:
+1. Published date (descending - newest vulnerabilities first)
+2. CVE ID (alphabetical) as secondary sort
+
+This ensures the most recent vulnerabilities appear at the top of the report.
 """
 
 import json
@@ -36,24 +69,67 @@ logger = logging.getLogger(__name__)
 
 def aggregate_vulnerabilities():
     """
-    Aggregate all vulnerability JSON files from machines.
+    Aggregate all vulnerability JSON files from machines into a comprehensive dataset.
     
-    @return dict Aggregated vulnerability data:
-                 {
-                   'machines': {
-                     'machine_name': {
-                       'host': 'ip_address',
-                       'total_vulns': count,
-                       'vulnerabilities': [...],
-                       'severity_distribution': {...}
-                     }
-                   },
-                   'statistics': {
-                     'total_machines': int,
-                     'total_cves': int,
-                     'severity_breakdown': {'critical': n, 'high': n, ...}
-                   }
-                 }
+    Reads all machine vulnerability reports from the cache directory and combines
+    them into a single data structure with aggregated statistics.
+    
+    @return dict Aggregated vulnerability data structure with keys:
+                 - machines: Dictionary of per-machine vulnerability data
+                 - statistics: Overall statistics across all machines
+    
+    @details
+    **Machines Dictionary Format:**
+    ```python
+    {
+        'machine_name': {
+            'name': str,                              # Machine identifier
+            'timestamp': str,                         # ISO format timestamp
+            'vulnerabilities': [                      # CVEs sorted by date (newest first)
+                {
+                    'cve_id': str,                   # e.g., "CVE-2024-1234"
+                    'cpe': str,                      # Affected component CPE
+                    'description': str,              # Vulnerability description
+                    'url': str,                      # Link to CVE details
+                    'severity': str,                 # critical/high/medium/low
+                    'published_date': str            # ISO format date
+                },
+                ...
+            ],
+            'total_vulns': int,                      # Total CVEs on machine
+            'severity_distribution': {               # Count per severity level
+                'critical': int,
+                'high': int,
+                'medium': int,
+                'low': int
+            },
+            'affected_cpes': [str, ...]              # List of vulnerable CPEs
+        },
+        ...
+    }
+    ```
+    
+    **Statistics Dictionary Format:**
+    ```python
+    {
+        'total_machines': int,                       # Number of scanned machines
+        'total_cves': int,                          # Total vulnerabilities found
+        'severity_breakdown': {                     # Overall severity distribution
+            'critical': int,
+            'high': int,
+            'medium': int,
+            'low': int
+        },
+        'generated_at': str                         # ISO format generation timestamp
+    }
+    ```
+    
+    @note
+    - Reads from: cache/machines/{machine}/vulnerability_report.json
+    - CVEs are automatically sorted by published_date (newest first)
+    - Missing dates are sorted to bottom
+    - Severity is estimated from CVE ID and description
+    - Handles malformed JSON gracefully with error logging
     """
     machines_dir = os.path.join(CACHE_DIR, "machines")
     
@@ -112,6 +188,7 @@ def aggregate_vulnerabilities():
                     cve_id = vuln.get('cve_id', 'UNKNOWN')
                     description = vuln.get('description', 'No description')
                     cve_url = vuln.get('cve_url', f'https://cve.mitre.org/cgi-bin/cvename.cgi?name={cve_id}')
+                    published_date = vuln.get('published_date', None)
                     
                     # Determine severity from CVE ID (basic heuristic)
                     severity = estimate_severity(cve_id, description)
@@ -121,11 +198,18 @@ def aggregate_vulnerabilities():
                         'cpe': cpe,
                         'description': description,
                         'url': cve_url,
-                        'severity': severity
+                        'severity': severity,
+                        'published_date': published_date
                     })
                     
                     machine_info['severity_distribution'][severity] += 1
                     aggregated_data['statistics']['severity_breakdown'][severity] += 1
+            
+            # Sort vulnerabilities by published_date (newest first), then by cve_id
+            machine_info['vulnerabilities'].sort(
+                key=lambda x: (x['published_date'] or '', x['cve_id']),
+                reverse=True
+            )
             
             machine_info['total_vulns'] = len(machine_info['vulnerabilities'])
             aggregated_data['statistics']['total_cves'] += machine_info['total_vulns']
@@ -212,9 +296,15 @@ def generate_html_report(output_file=None, machines_config=None):
         try:
             from src.reporting import network_visualizer as nv
             logger.info("Generating network visualizations...")
+            print("[*] Generating network visualizations...")
             network_visualizations = nv.generate_network_visualizations(machines_config)
+            if network_visualizations:
+                successful = sum(1 for v in network_visualizations.values() if v['generated'])
+                logger.info(f"Generated {successful} network visualizations")
+                print(f"[✓] Network visualizations complete ({successful} machines)")
         except Exception as e:
             logger.warning(f"Failed to generate network visualizations: {e}")
+            print(f"[⚠] Could not generate network visualizations: {e}")
     
     # Create templates directory
     templates_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'templates')

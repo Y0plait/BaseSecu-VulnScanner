@@ -81,16 +81,59 @@ def generate_network_svg_for_host(host_address, machine_name):
     """
     Generate SVG network topology diagram for a specific host using visualnet-scanner.
     
-    @param host_address str IP address or network address (e.g., '192.168.10.66', '192.168.10.0/24')
-    @param machine_name str Machine name for file naming and logging
+    Executes the visualnet-scanner.sh script to perform an Nmap scan on the target
+    host and generate an SVG visualization of the network topology. Results are
+    cached for future report generation.
     
-    @return str Path to generated SVG file, or None if generation failed
+    @param host_address str IP address or hostname to scan (e.g., "192.168.10.66")
+    @param machine_name str Machine identifier for caching (e.g., "srv01")
+    
+    @return str Path to generated SVG file (cache/machines/{machine}/network_topology.svg)
+            or None if generation failed
     
     @details
-    Executes visualnet-scanner.sh to scan the network and generate SVG topology.
-    Output is saved to cache/machines/{machine_name}/network_topology.svg
+    **Execution Flow:**
     
-    The script expects visualnet-scanner.sh to be in the project root directory.
+    1. Verify visualnet-scanner.sh exists and is executable
+    2. Call: ./visualnet-scanner.sh {host_address} network_topology.svg
+    3. Script internally:
+       - Executes nmap scan (-T4 -F mode for speed)
+       - Converts Nmap XML to Graphviz DOT format via nmap-formatter
+       - Generates SVG using dot -Tsvg
+    4. Capture SVG output from stdout
+    5. Save to cache/machines/{machine}/network_topology.svg
+    
+    **Output Location:**
+    
+    - File: cache/machines/{machine_name}/network_topology.svg
+    - Permissions: User readable
+    - Size: Typically 5-50KB depending on network size
+    
+    **External Dependencies:**
+    
+    - visualnet-scanner.sh: Main orchestration script (must be in project root)
+    - nmap: Network scanning tool (system package)
+    - nmap-formatter: Custom binary (project root)
+    - graphviz (dot): SVG generation (system package)
+    
+    **Error Handling:**
+    
+    - Missing script: Logs warning, returns None
+    - Non-executable script: Logs warning, returns None
+    - Nmap timeout: Falls back to informational SVG
+    - Format conversion failure: Falls back to informational SVG
+    - Empty output: Creates fallback SVG with machine info
+    
+    **Timeouts:**
+    
+    - Default: 5 minutes (300 seconds)
+    - Covers: Nmap scan + format conversion + SVG generation
+    
+    @note
+    - Logs execution details to logger for audit trail
+    - Uses subprocess.run() with capture_output=True, text=True
+    - Suppresses stderr to avoid log pollution
+    - Creates fallback SVG if primary scanning fails
     """
     try:
         # Determine the scan target - use the host address
@@ -128,17 +171,27 @@ def generate_network_svg_for_host(host_address, machine_name):
         logger.info(f"Generating network SVG for {machine_name} ({scan_target})...")
         
         # Execute the scanner script
-        # Syntax: ./visualnet-scanner.sh <target> <output.svg>
+        # Syntax: ./visualnet-scanner.sh <target> <output_filename>
+        # The script outputs SVG to stdout and logs to stderr
         result = subprocess.run(
-            [scanner_script, scan_target, svg_output],
+            [scanner_script, scan_target, "network_topology.svg"],
             capture_output=True,
             text=True,
             timeout=300  # 5 minute timeout for network scan
         )
         
         # Check if execution was successful
-        if result.returncode != 0:
-            logger.error(f"Network scan failed for {machine_name}: {result.stderr}")
+        if result.returncode == 0 and result.stdout:
+            # The script outputs the SVG content to stdout
+            svg_content = result.stdout
+            with open(svg_output, 'w') as f:
+                f.write(svg_content)
+            logger.info(f"✓ Network SVG generated for {machine_name}")
+            return svg_output
+        else:
+            logger.error(f"Network scan failed for {machine_name}")
+            if result.stderr:
+                logger.debug(f"Script stderr: {result.stderr}")
             # Try to create a fallback informational SVG
             logger.info(f"Creating fallback network information SVG for {machine_name}")
             svg_fallback = create_fallback_network_svg(host_address, machine_name)
@@ -263,6 +316,7 @@ def generate_network_visualizations(machines_config):
     network_visualizations = {}
     
     logger.info(f"Generating network visualizations for {len(machines_config)} machines...")
+    print(f"[*] Generating network topology diagrams...")
     
     for machine_name, machine_config in machines_config.items():
         if machine_config.get('type') != 'linux':
@@ -289,8 +343,11 @@ def generate_network_visualizations(machines_config):
             network_visualizations[machine_name]['svg_content'] = svg_content
             network_visualizations[machine_name]['generated'] = True
             logger.info(f"Network visualization ready for {machine_name}")
+            print(f"[✓] Network diagram generated for {machine_name}")
         else:
             logger.warning(f"Failed to generate network visualization for {machine_name}")
+            print(f"[⚠] Could not generate diagram for {machine_name} (see logs for details)")
     
-    logger.info(f"Network visualization generation complete: {sum(1 for v in network_visualizations.values() if v['generated'])} successful")
+    successful = sum(1 for v in network_visualizations.values() if v['generated'])
+    logger.info(f"Network visualization generation complete: {successful} successful")
     return network_visualizations
