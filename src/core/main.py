@@ -41,8 +41,6 @@ from src.reporting import vulnerability_checker as vc
 from src.reporting import html_report_generator as html_gen
 from src.caching.constants import NVD_NIST_CPE_API_KEY, CACHE_DIR, DEFAULT_INVENTORY, API_REQUEST_DELAY
 
-import json
-
 # Configure logging
 log_dir = "logs"
 if not os.path.exists(log_dir):

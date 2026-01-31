@@ -109,6 +109,109 @@ L'outil utilise le modèle LLM `Gemini Flash 2.5` de Google pour générer autom
 - **Dashboard web complet** (seuls les rapports HTML sont générés)
 - **Scoring CVSS intégré** (les données brutes sont disponibles)
 
+## Schématisation du fonctionnement
+
+```mermaid
+
+flowchart TD
+    Start([Démarrage]) --> ParseArgs["📋 Parser Arguments<br/>(inventory, --flush-cache, etc)"]
+    ParseArgs --> LoadConfig["⚙️ Charger Inventory<br/>(inventory.ini)"]
+    LoadConfig --> ReportOnly{Mode<br/>--report-only?}
+    
+    ReportOnly -->|Oui| GenReportCache["📊 Générer Rapport HTML<br/>depuis le cache"]
+    GenReportCache --> HTMLOut["🌐 Rapport HTML<br/>(SVG intégré)"]
+    HTMLOut --> End1([Fin])
+    
+    ReportOnly -->|Non| FlushDecision{--flush-cache?}
+    FlushDecision -->|Oui| FlushCaches["🗑️ Vider Caches<br/>(CPE, packages, DB)"]
+    FlushCaches --> InitGenAI
+    FlushDecision -->|Non| InitGenAI["🤖 Initialiser Google GenAI<br/>(Gemini 2.5 Flash)"]
+    
+    InitGenAI --> TestNVD["🔍 Tester Connexion NVD API<br/>(CPE test: log4j 2.14.1)"]
+    TestNVD --> MachineLoop["🔄 Boucler sur chaque Machine"]
+    
+    MachineLoop --> SkipDefault{Machine<br/>= DEFAULT?}
+    SkipDefault -->|Oui| NextMachine["↪️ Machine suivante"]
+    SkipDefault -->|Non| CheckType{Type<br/>= linux?}
+    
+    CheckType -->|Non| NextMachine
+    CheckType -->|Oui| GetPackages["📦 Récupérer Packages<br/>(SSH + pkg_finder)"]
+    
+    GetPackages --> CompareCache["🔄 Comparer avec Cache<br/>(machines/{machine}/installed_packages.json)"]
+    CompareCache --> DetectNew["🆕 Détecter Nouveaux Packages<br/>(--force-check: tous les packages)"]
+    
+    DetectNew --> NoNew{Nouveaux?}
+    NoNew -->|Non| LoadHardware
+    NoNew -->|Oui| GenerateCPE["🎯 Générer CPE<br/>(AI GenAI - batch processing)"]
+    
+    LoadHardware["⚙️ Charger Info Matériel<br/>(lscpu - CPU)"]
+    GenerateCPE --> CachePackages["💾 Cacher Packages<br/>(cpe_cache.json)"]
+    CachePackages --> LoadHardware
+    
+    LoadHardware --> GenHWCPE["🎯 Générer CPE Matériel<br/>(CPU vulnérabilités)"]
+    GenHWCPE --> QueryNVD["🔗 Interroger NVD API<br/>(vulnerability_checker.py)"]
+    
+    QueryNVD --> CheckCache["🔍 Vérifier Cache SQLite<br/>(cache_db.py)"]
+    CheckCache --> CacheHit{Dans<br/>cache?}
+    
+    CacheHit -->|Oui| UseCache["✅ Utiliser Vulnérabilités<br/>en cache"]
+    CacheHit -->|Non| APICall["📡 Appel NVD API<br/>(rate limit: 0.6s)"]
+    
+    APICall --> HandleErrors{"Code<br/>HTTP?"}
+    HandleErrors -->|429/503| Backoff["⏸️ Backoff Exponentiel<br/>(exponential delay)"]
+    HandleErrors -->|404| ContinueNext
+    HandleErrors -->|200| ParseVuln["📊 Parser Vulnérabilités<br/>(CVE, CVSS, CWE)"]
+    
+    Backoff --> APICall
+    ParseVuln --> StoreSQLite["💾 Stocker en Cache SQLite<br/>(vulnerabilities table)"]
+    UseCache --> StoreSQLite
+    StoreSQLite --> ContinueNext["↪️ Package/CPE suivant"]
+    
+    ContinueNext --> AllPkgDone{Tous<br/>traités?}
+    AllPkgDone -->|Non| QueryNVD
+    AllPkgDone -->|Oui| GenJSONReport["📄 Générer Rapport JSON<br/>(machines/{machine}/vulnerability_report.json)"]
+    
+    GenJSONReport --> FormatOutput["🖥️ Formatter Output Terminal<br/>(Colors + Stats)"]
+    FormatOutput --> NextMachine
+    
+    NextMachine --> AllMachines{Toutes<br/>machines?}
+    AllMachines -->|Non| MachineLoop
+    AllMachines -->|Oui| GenHTML["📊 Générer Rapport HTML Global<br/>(html_report_generator)"]
+    
+    GenHTML --> EmbedSVG["🎨 Intégrer SVG Réseau<br/>(network_visualizer)"]
+    EmbedSVG --> HTMLReport["🌐 Rapport HTML Final<br/>(cache/vulnerability_report.html)"]
+
+    HTMLReport --> End2([Fin])
+
+```
+
+### Explication du Flux Principal
+
+**Phase 1: Initialisation**
+1. Charger la configuration (inventory.ini)
+2. Tester la connexion NVD API
+3. Initialiser Google GenAI (une seule fois)
+
+**Phase 2: Découverte par Machine**
+1. Récupérer les packages via SSH
+2. Détecter les nouveaux packages (cache delta)
+3. Générer des CPE via GenAI (batch processing)
+4. Récupérer les infos matérielles (CPU)
+5. Générer CPE matériels
+
+**Phase 3: Matching Vulnérabilités**
+1. Vérifier le cache SQLite d'abord
+2. Si manquant, interroger l'API NVD
+3. Respecter les limites de débit (0.6s entre requêtes)
+4. Gérer les erreurs API (backoff exponentiel)
+5. Stocker en cache pour les exécutions suivantes
+
+**Phase 4: Reporting**
+1. Générer des rapports JSON par machine
+2. Formatter la sortie terminal
+3. Créer un rapport HTML global
+4. Intégrer les visualisations réseau (SVG)
+
 ## Utilisation
 
 ### Prérequis
